@@ -1,0 +1,15 @@
+{
+  "name": "telegram-bot-c2",
+  "version": "1.0.0",
+  "description": "Telegram bot for remote control",
+  "main": "dummy.js",
+  "scripts": {
+    "start": "python3 master_bot.py",
+    "build": "pip3 install -r requirements.txt"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=14.0.0",
+    "python": ">=3.8"
+  }
+}
