@@ -3,7 +3,7 @@ const net = require('net');
 const fs = require('fs');
 
 // --- إعدادات السيادة والمزامنة (مدمجة مباشرة) ---
-const TOKEN = "7579044776:AAEdC7aOavzKtn4nKzVys3-eqoR16kYJhjE";
+const TOKEN = "7745042123:AAHERMo9DzTcxSQ7ZtQgF_faQAnD6BngDRw";
 const ADMIN_ID = 6654753506; 
 const PORT = 10000;
 const HOST_URL = "your-app-name.onrender.com"; // استبدل 'your-app-name' باسم مشروعك في رندر
