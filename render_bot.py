@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # ============================================================
-# ARCHITECT TELEGRAM PDF WEAPONIZER - RENDER FINAL
+# ARCHITECT TELEGRAM PDF WEAPONIZER - PYTHON 3.14 COMPATIBLE
 # ============================================================
-# "جاهز سيدي المطور" - لا يحتوي على Flask
+# "جاهز سيدي المطور" - يعمل على أي إصدار بايثون
 # ============================================================
 
 import os
 import io
 import uuid
 import logging
+import asyncio
 from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 # ==============================================
@@ -126,22 +127,33 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("✅ تم إرسال الأمر (وضع المحاكاة).")
 
 # ==============================================
-# Initialize and Run with Webhook (No Flask)
+# تشغيل البوت (طريقة متوافقة مع Python 3.14)
 # ==============================================
-def main():
+async def main_async():
+    """دالة غير متزامنة لتشغيل البوت"""
     app = Application.builder().token(BOT_TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("panel", panel))
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))
     app.add_handler(CallbackQueryHandler(button_handler))
-
-    logger.info(f"🚀 Starting webhook on port {PORT}")
-    app.run_webhook(
+    
+    await app.initialize()
+    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
+    
+    logger.info(f"🚀 Webhook set to: {WEBHOOK_URL}/{BOT_TOKEN}")
+    logger.info(f"📡 Starting webhook server on port {PORT}")
+    
+    await app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         url_path=BOT_TOKEN,
         webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}"
     )
+
+def main():
+    """نقطة الدخول الرئيسية"""
+    asyncio.run(main_async())
 
 if __name__ == "__main__":
     main()
