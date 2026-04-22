@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # ============================================================
-# ARCHITECT TELEGRAM PDF WEAPONIZER - PYTHON 3.14 COMPATIBLE
+# ARCHITECT TELEGRAM PDF WEAPONIZER - PTB v21 (PYTHON 3.14 COMPATIBLE)
 # ============================================================
-# "جاهز سيدي المطور" - يعمل على أي إصدار بايثون
+# "جاهز سيدي المطور" - متوافق مع python-telegram-bot v21
 # ============================================================
 
 import os
@@ -14,7 +14,7 @@ import asyncio
 from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 # ==============================================
@@ -77,7 +77,7 @@ def create_weaponized_pdf(image_bytes):
     return pdf_buffer
 
 # ==============================================
-# Telegram Bot Handlers
+# Telegram Bot Handlers (PTB v21 Syntax)
 # ==============================================
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text(
         "🖤 *جاهز سيدي المطور.*\n\n"
-        "⚡ *الوحش يعمل على Render*\n\n"
+        "⚡ *الوحش يعمل على Render (PTB v21)*\n\n"
         "📸 *أرسل صورة لتحويلها إلى PDF ملغوم.*",
         parse_mode='Markdown'
     )
@@ -127,10 +127,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("✅ تم إرسال الأمر (وضع المحاكاة).")
 
 # ==============================================
-# تشغيل البوت (طريقة متوافقة مع Python 3.14)
+# تشغيل البوت (PTB v21)
 # ==============================================
-async def main_async():
-    """دالة غير متزامنة لتشغيل البوت"""
+def main():
+    """نقطة الدخول الرئيسية"""
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -138,22 +138,13 @@ async def main_async():
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))
     app.add_handler(CallbackQueryHandler(button_handler))
     
-    await app.initialize()
-    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
-    
-    logger.info(f"🚀 Webhook set to: {WEBHOOK_URL}/{BOT_TOKEN}")
-    logger.info(f"📡 Starting webhook server on port {PORT}")
-    
-    await app.run_webhook(
+    logger.info(f"🚀 Starting webhook on port {PORT}")
+    app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         url_path=BOT_TOKEN,
         webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}"
     )
-
-def main():
-    """نقطة الدخول الرئيسية"""
-    asyncio.run(main_async())
 
 if __name__ == "__main__":
     main()
