@@ -1,0 +1,6 @@
+python-telegram-bot==20.6
+pillow==10.1.0
+reportlab==4.0.7
+flask==3.0.0
+pypdf2==3.0.1
+pycryptodome==3.19.0
